@@ -1,2 +1,2 @@
 # collablite
-Object sharing service
+Object/data sharing service. 
