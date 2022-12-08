@@ -22,7 +22,9 @@ package collabproto;
 // The CollabLite service definition.
 service CollabLite {
 
-  rpc ProcessDocumentChanges(stream DocChange) returns (stream DocConfirmation) {}
+  rpc AddPropertyToDocument (AddUpdatePropertyRequest) returns (StatusResponse) {}
+  rpc UpdatePropertyToDocument (AddUpdatePropertyRequest) returns (StatusResponse) {}
+  rpc RemovePropertyFromDocument (RemovePropertyRequest) returns (StatusResponse) {}
   rpc ImportDocument (ImportRequest) returns (StatusResponse) {}
   rpc GetDocument (GetRequest) returns (GetResponse) {}
   rpc ListDocuments (ListRequest) returns (ListResponse) {}
@@ -33,27 +35,28 @@ service CollabLite {
 // Assumption is identifying user is done outside of the messages
 ////////////////////////////
 
-
-// DocChange indicates a change requested by the client to the server.
-message DocChange {
+// AddUpdatePropertyRequest used for both add and update
+// object_id is assigned when added to DB.
+// object_name is friendly name.
+message AddUpdatePropertyRequest {
   string object_id = 1;
-  string property_path = 2;
-  string value = 3;  // dumb assumption is that we're just dealing with text (specifically JSON) for now.
-  string unique_id = 4; // unique id for this change. This will be used to make sure clients can check if THEY sent the change or not.
+  string object_name = 2;
+  string property_path = 3;
+  bytes data = 4;
 }
 
-// DocConfirmation message from server to client indicating that the change in question is confirmed as good.
-message DocConfirmation {
+// RemovePropertyRequest used to remove a property from a document
+message RemovePropertyRequest {
   string object_id = 1;
-  string property_path = 2;
-  string value = 3;  // dumb assumption is that we're just dealing with text (specifically JSON) for now.
-  string unique_id = 4; // unique id for this change.
+  string object_name = 2;
+  string property_path = 3;
 }
+
 
 // ImportRequest imports entire JSON(-ish) document into the database
 message ImportRequest {
   string object_name = 1;
-  string data = 2;
+  bytes data = 2;
 }
 
 // GetRequest gets the entire object
@@ -64,7 +67,7 @@ message GetRequest {
 message GetResponse {
   string object_id = 1;
   string object_name = 2;
-  string data = 3;
+  bytes data = 3;
 }
 
 // ListRequest lists all objects (for user).
@@ -77,6 +80,7 @@ message StatusResponse {
   string message = 1;
   int32 code = 2;
 }
+
 
 // ListResponse is just id/name... maybe dates?
 message ListResponse {

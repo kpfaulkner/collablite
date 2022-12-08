@@ -22,9 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CollabLiteClient interface {
-	AddPropertyToDocument(ctx context.Context, in *AddUpdatePropertyRequest, opts ...grpc.CallOption) (*StatusResponse, error)
-	UpdatePropertyToDocument(ctx context.Context, in *AddUpdatePropertyRequest, opts ...grpc.CallOption) (*StatusResponse, error)
-	RemovePropertyFromDocument(ctx context.Context, in *RemovePropertyRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	ProcessDocumentChanges(ctx context.Context, opts ...grpc.CallOption) (CollabLite_ProcessDocumentChangesClient, error)
 	ImportDocument(ctx context.Context, in *ImportRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	GetDocument(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error)
 	ListDocuments(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error)
@@ -38,31 +36,35 @@ func NewCollabLiteClient(cc grpc.ClientConnInterface) CollabLiteClient {
 	return &collabLiteClient{cc}
 }
 
-func (c *collabLiteClient) AddPropertyToDocument(ctx context.Context, in *AddUpdatePropertyRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
-	err := c.cc.Invoke(ctx, "/collabproto.CollabLite/AddPropertyToDocument", in, out, opts...)
+func (c *collabLiteClient) ProcessDocumentChanges(ctx context.Context, opts ...grpc.CallOption) (CollabLite_ProcessDocumentChangesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &CollabLite_ServiceDesc.Streams[0], "/collabproto.CollabLite/ProcessDocumentChanges", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &collabLiteProcessDocumentChangesClient{stream}
+	return x, nil
 }
 
-func (c *collabLiteClient) UpdatePropertyToDocument(ctx context.Context, in *AddUpdatePropertyRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
-	err := c.cc.Invoke(ctx, "/collabproto.CollabLite/UpdatePropertyToDocument", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+type CollabLite_ProcessDocumentChangesClient interface {
+	Send(*DocChange) error
+	Recv() (*DocConfirmation, error)
+	grpc.ClientStream
 }
 
-func (c *collabLiteClient) RemovePropertyFromDocument(ctx context.Context, in *RemovePropertyRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
-	err := c.cc.Invoke(ctx, "/collabproto.CollabLite/RemovePropertyFromDocument", in, out, opts...)
-	if err != nil {
+type collabLiteProcessDocumentChangesClient struct {
+	grpc.ClientStream
+}
+
+func (x *collabLiteProcessDocumentChangesClient) Send(m *DocChange) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *collabLiteProcessDocumentChangesClient) Recv() (*DocConfirmation, error) {
+	m := new(DocConfirmation)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return m, nil
 }
 
 func (c *collabLiteClient) ImportDocument(ctx context.Context, in *ImportRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
@@ -96,9 +98,7 @@ func (c *collabLiteClient) ListDocuments(ctx context.Context, in *ListRequest, o
 // All implementations must embed UnimplementedCollabLiteServer
 // for forward compatibility
 type CollabLiteServer interface {
-	AddPropertyToDocument(context.Context, *AddUpdatePropertyRequest) (*StatusResponse, error)
-	UpdatePropertyToDocument(context.Context, *AddUpdatePropertyRequest) (*StatusResponse, error)
-	RemovePropertyFromDocument(context.Context, *RemovePropertyRequest) (*StatusResponse, error)
+	ProcessDocumentChanges(CollabLite_ProcessDocumentChangesServer) error
 	ImportDocument(context.Context, *ImportRequest) (*StatusResponse, error)
 	GetDocument(context.Context, *GetRequest) (*GetResponse, error)
 	ListDocuments(context.Context, *ListRequest) (*ListResponse, error)
@@ -109,14 +109,8 @@ type CollabLiteServer interface {
 type UnimplementedCollabLiteServer struct {
 }
 
-func (UnimplementedCollabLiteServer) AddPropertyToDocument(context.Context, *AddUpdatePropertyRequest) (*StatusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddPropertyToDocument not implemented")
-}
-func (UnimplementedCollabLiteServer) UpdatePropertyToDocument(context.Context, *AddUpdatePropertyRequest) (*StatusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdatePropertyToDocument not implemented")
-}
-func (UnimplementedCollabLiteServer) RemovePropertyFromDocument(context.Context, *RemovePropertyRequest) (*StatusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RemovePropertyFromDocument not implemented")
+func (UnimplementedCollabLiteServer) ProcessDocumentChanges(CollabLite_ProcessDocumentChangesServer) error {
+	return status.Errorf(codes.Unimplemented, "method ProcessDocumentChanges not implemented")
 }
 func (UnimplementedCollabLiteServer) ImportDocument(context.Context, *ImportRequest) (*StatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ImportDocument not implemented")
@@ -140,58 +134,30 @@ func RegisterCollabLiteServer(s grpc.ServiceRegistrar, srv CollabLiteServer) {
 	s.RegisterService(&CollabLite_ServiceDesc, srv)
 }
 
-func _CollabLite_AddPropertyToDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AddUpdatePropertyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CollabLiteServer).AddPropertyToDocument(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/collabproto.CollabLite/AddPropertyToDocument",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CollabLiteServer).AddPropertyToDocument(ctx, req.(*AddUpdatePropertyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+func _CollabLite_ProcessDocumentChanges_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(CollabLiteServer).ProcessDocumentChanges(&collabLiteProcessDocumentChangesServer{stream})
 }
 
-func _CollabLite_UpdatePropertyToDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AddUpdatePropertyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CollabLiteServer).UpdatePropertyToDocument(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/collabproto.CollabLite/UpdatePropertyToDocument",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CollabLiteServer).UpdatePropertyToDocument(ctx, req.(*AddUpdatePropertyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+type CollabLite_ProcessDocumentChangesServer interface {
+	Send(*DocConfirmation) error
+	Recv() (*DocChange, error)
+	grpc.ServerStream
 }
 
-func _CollabLite_RemovePropertyFromDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RemovePropertyRequest)
-	if err := dec(in); err != nil {
+type collabLiteProcessDocumentChangesServer struct {
+	grpc.ServerStream
+}
+
+func (x *collabLiteProcessDocumentChangesServer) Send(m *DocConfirmation) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *collabLiteProcessDocumentChangesServer) Recv() (*DocChange, error) {
+	m := new(DocChange)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(CollabLiteServer).RemovePropertyFromDocument(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/collabproto.CollabLite/RemovePropertyFromDocument",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CollabLiteServer).RemovePropertyFromDocument(ctx, req.(*RemovePropertyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 func _CollabLite_ImportDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -256,18 +222,6 @@ var CollabLite_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*CollabLiteServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "AddPropertyToDocument",
-			Handler:    _CollabLite_AddPropertyToDocument_Handler,
-		},
-		{
-			MethodName: "UpdatePropertyToDocument",
-			Handler:    _CollabLite_UpdatePropertyToDocument_Handler,
-		},
-		{
-			MethodName: "RemovePropertyFromDocument",
-			Handler:    _CollabLite_RemovePropertyFromDocument_Handler,
-		},
-		{
 			MethodName: "ImportDocument",
 			Handler:    _CollabLite_ImportDocument_Handler,
 		},
@@ -280,6 +234,13 @@ var CollabLite_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _CollabLite_ListDocuments_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ProcessDocumentChanges",
+			Handler:       _CollabLite_ProcessDocumentChanges_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "proto/collablite.proto",
 }
