@@ -1,15 +1,14 @@
 package server
 
 import (
-	pb ""
-
 	"github.com/kpfaulkner/collablite/pkg/storage"
+	"github.com/kpfaulkner/collablite/proto"
 )
 
 // CollabLiteServer receives gRPC requests from clients and modifies the
 // object/data accordingly.
 type CollabLiteServer struct {
-	pb.UnimplementedGreeterServer
+	proto.UnimplementedCollabLiteServer
 	db storage.DB
 }
 

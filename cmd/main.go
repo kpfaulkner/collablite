@@ -6,6 +6,9 @@ import (
 	"log"
 	"net"
 
+	"github.com/kpfaulkner/collablite/pkg/server"
+	"github.com/kpfaulkner/collablite/pkg/storage"
+	"github.com/kpfaulkner/collablite/proto"
 	"google.golang.org/grpc"
 )
 
@@ -20,7 +23,12 @@ func main() {
 	}
 	var opts []grpc.ServerOption
 
+	db, err := storage.NewDBSQLite("collablite.db")
+	if err != nil {
+		log.Fatalf("failed to create db: %v", err)
+	}
+
 	grpcServer := grpc.NewServer(opts...)
-	pb.RegisterRouteGuideServer(grpcServer, newServer())
+	proto.RegisterCollabLiteServer(grpcServer, server.NewCollabLiteServer(db))
 	grpcServer.Serve(lis)
 }
