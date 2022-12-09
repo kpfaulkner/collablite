@@ -1,19 +1,14 @@
 package storage
 
 // DB interface used to store the data *somewhere*
-// Expectation is that the data is in a JSON(-ish) format.
-// ObjectID is just some unique identifier
-// Path is a JSON path... e.g. /foo/bar/baz
-// Data will be byte array verson of JSON. Maybe switch this to a string?
 type DB interface {
 
 	// Add an object to the DB.
 	//
-	Add(objectID string, path string, data []byte) error
-	Delete(objectID string, path string) error
-	Update(objectID string, path string, data []byte) error
+	Add(objectID string, propertyID string, data []byte) error
+	Delete(objectID string, propertyID string) error
+	Update(objectID string, propertyID string, data []byte) error
 
-	// Import an entire JSON structure to the DB
-	// return objectID
-	Import(data []byte) (string, error)
+	// Import imports an entire object (basically objectID and property collection)
+	Import(objectID string, properties map[string][]byte) (string, error)
 }

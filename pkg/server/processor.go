@@ -8,23 +8,23 @@ import (
 	"github.com/kpfaulkner/collablite/proto"
 )
 
-// ObjectIDChannels holds input channel (original docChange) and slice of
-// output channels, one per client that is working on that document.
+// ObjectIDChannels holds input channel (original objectChange) and slice of
+// output channels, one per client that is working on that object
 type ObjectIDChannels struct {
-	inChannel chan *proto.DocChange
+	inChannel chan *proto.ObjectChange
 
 	// map of unique id (related to client, somehow) and outgoing channel with results
-	outChannels map[string]chan *proto.DocConfirmation
+	outChannels map[string]chan *proto.ObjectConfirmation
 }
 
-// Processor takes the docChange (from channel), stores to the DB and return docConfirmation via channel
+// Processor takes the objectChange (from channel), stores to the DB and return objectConfirmation via channel
 type Processor struct {
 	objectChannelLock sync.Mutex
 
-	// map of object/document id to channels used for input and output.
+	// map of object id to channels used for input and output.
 	objectChannels map[string]*ObjectIDChannels
 
-	// DB for storing docs.
+	// DB for storing objects
 	db storage.DB
 }
 
@@ -35,11 +35,11 @@ func NewProcessor(db storage.DB) *Processor {
 	return &p
 }
 
-// RegisterClientWithDoc registers a clientID and objectID with the processor.
-// This is used when a document is processed... it will contain a list of clients/channels
-// that need to get the results of the processing of a given document/object.
-// Will return inChan (specific for document) and results channel (specific for document AND clientid) to caller.
-func (p *Processor) RegisterClientWithDoc(clientID string, objectID string) (chan *proto.DocChange, chan *proto.DocConfirmation, error) {
+// RegisterClientWithObject registers a clientID and objectID with the processor.
+// This is used when an object is processed... it will contain a list of clients/channels
+// that need to get the results of the processing of a given object.
+// Will return inChan (specific for object) and results channel (specific for object AND clientid) to caller.
+func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (chan *proto.ObjectChange, chan *proto.ObjectConfirmation, error) {
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
 
@@ -47,25 +47,25 @@ func (p *Processor) RegisterClientWithDoc(clientID string, objectID string) (cha
 	var ok bool
 	if oc, ok = p.objectChannels[objectID]; !ok {
 		oc = &ObjectIDChannels{}
-		oc.inChannel = make(chan *proto.DocChange, 1000) // FIXME(kpfaulkner) configure 1000
-		oc.outChannels = make(map[string]chan *proto.DocConfirmation)
+		oc.inChannel = make(chan *proto.ObjectChange, 1000) // FIXME(kpfaulkner) configure 1000
+		oc.outChannels = make(map[string]chan *proto.ObjectConfirmation)
 		p.objectChannels[objectID] = oc
 
-		// this is a new document being processed, so start a go routine to process it.
-		go p.ProcessDocChanges(objectID)
+		// this is a new object being processed, so start a go routine to process it.
+		go p.ProcessObjectChanges(objectID)
 	}
 
-	var clientObjectChannel chan *proto.DocConfirmation
+	var clientObjectChannel chan *proto.ObjectConfirmation
 	if clientObjectChannel, ok = oc.outChannels[clientID]; !ok {
 		// create an out channel specific for the client. This will be used to send results.
-		oc.outChannels[clientID] = make(chan *proto.DocConfirmation, 1000) // FIXME(kpfaulkner) configure 1000
+		oc.outChannels[clientID] = make(chan *proto.ObjectConfirmation, 1000) // FIXME(kpfaulkner) configure 1000
 		clientObjectChannel = oc.outChannels[clientID]
 	}
 
 	return oc.inChannel, clientObjectChannel, nil
 }
 
-func (p *Processor) UnregisterClientWithDoc(clientID string, objectID string) error {
+func (p *Processor) UnregisterClientWithObject(clientID string, objectID string) error {
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
 
@@ -85,7 +85,7 @@ func (p *Processor) UnregisterClientWithDoc(clientID string, objectID string) er
 	return nil
 }
 
-func (p *Processor) getInChanForObjectID(objectID string) (chan *proto.DocChange, error) {
+func (p *Processor) getInChanForObjectID(objectID string) (chan *proto.ObjectChange, error) {
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
 
@@ -96,28 +96,28 @@ func (p *Processor) getInChanForObjectID(objectID string) (chan *proto.DocChange
 	return nil, fmt.Errorf("objectID not found")
 }
 
-func (p *Processor) ProcessDocChanges(docID string) error {
+func (p *Processor) ProcessObjectChanges(objectID string) error {
 
 	// get in chan
-	inChan, err := p.getInChanForObjectID(docID)
+	inChan, err := p.getInChanForObjectID(objectID)
 	if err != nil {
-		fmt.Printf("Unable to process docid %s\n", docID)
+		fmt.Printf("Unable to process objectID %s\n", objectID)
 		return err
 	}
 
-	for docChange := range inChan {
+	for objChange := range inChan {
 		// do stuff.... then return result.
-		res := proto.DocConfirmation{}
-		res.ObjectId = docChange.ObjectId
-		res.PropertyPath = docChange.PropertyPath
-		res.UniqueId = docChange.UniqueId
-		res.Data = docChange.Data
+		res := proto.ObjectConfirmation{}
+		res.ObjectId = objChange.ObjectId
+		res.PropertyId = objChange.PropertyId
+		res.UniqueId = objChange.UniqueId
+		res.Data = objChange.Data
 
 		// loop through all out channels and send result.
 		// this REALLY sucks holding the lock for this long, but will do for now.
 		// FIXME(kpfaulkner) MUST optimise this!
 		p.objectChannelLock.Lock()
-		for _, oc := range p.objectChannels[docID].outChannels {
+		for _, oc := range p.objectChannels[objectID].outChannels {
 			oc <- &res
 		}
 		p.objectChannelLock.Unlock()

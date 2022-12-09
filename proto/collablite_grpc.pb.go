@@ -22,10 +22,10 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CollabLiteClient interface {
-	ProcessDocumentChanges(ctx context.Context, opts ...grpc.CallOption) (CollabLite_ProcessDocumentChangesClient, error)
-	ImportDocument(ctx context.Context, in *ImportRequest, opts ...grpc.CallOption) (*StatusResponse, error)
-	GetDocument(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error)
-	ListDocuments(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error)
+	ProcessObjectChanges(ctx context.Context, opts ...grpc.CallOption) (CollabLite_ProcessObjectChangesClient, error)
+	ImportObject(ctx context.Context, in *ImportRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	GetObject(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error)
+	ListObjects(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error)
 }
 
 type collabLiteClient struct {
@@ -36,58 +36,58 @@ func NewCollabLiteClient(cc grpc.ClientConnInterface) CollabLiteClient {
 	return &collabLiteClient{cc}
 }
 
-func (c *collabLiteClient) ProcessDocumentChanges(ctx context.Context, opts ...grpc.CallOption) (CollabLite_ProcessDocumentChangesClient, error) {
-	stream, err := c.cc.NewStream(ctx, &CollabLite_ServiceDesc.Streams[0], "/collabproto.CollabLite/ProcessDocumentChanges", opts...)
+func (c *collabLiteClient) ProcessObjectChanges(ctx context.Context, opts ...grpc.CallOption) (CollabLite_ProcessObjectChangesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &CollabLite_ServiceDesc.Streams[0], "/collabproto.CollabLite/ProcessObjectChanges", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &collabLiteProcessDocumentChangesClient{stream}
+	x := &collabLiteProcessObjectChangesClient{stream}
 	return x, nil
 }
 
-type CollabLite_ProcessDocumentChangesClient interface {
-	Send(*DocChange) error
-	Recv() (*DocConfirmation, error)
+type CollabLite_ProcessObjectChangesClient interface {
+	Send(*ObjectChange) error
+	Recv() (*ObjectConfirmation, error)
 	grpc.ClientStream
 }
 
-type collabLiteProcessDocumentChangesClient struct {
+type collabLiteProcessObjectChangesClient struct {
 	grpc.ClientStream
 }
 
-func (x *collabLiteProcessDocumentChangesClient) Send(m *DocChange) error {
+func (x *collabLiteProcessObjectChangesClient) Send(m *ObjectChange) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *collabLiteProcessDocumentChangesClient) Recv() (*DocConfirmation, error) {
-	m := new(DocConfirmation)
+func (x *collabLiteProcessObjectChangesClient) Recv() (*ObjectConfirmation, error) {
+	m := new(ObjectConfirmation)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func (c *collabLiteClient) ImportDocument(ctx context.Context, in *ImportRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
+func (c *collabLiteClient) ImportObject(ctx context.Context, in *ImportRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
 	out := new(StatusResponse)
-	err := c.cc.Invoke(ctx, "/collabproto.CollabLite/ImportDocument", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/collabproto.CollabLite/ImportObject", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *collabLiteClient) GetDocument(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error) {
+func (c *collabLiteClient) GetObject(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error) {
 	out := new(GetResponse)
-	err := c.cc.Invoke(ctx, "/collabproto.CollabLite/GetDocument", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/collabproto.CollabLite/GetObject", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *collabLiteClient) ListDocuments(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error) {
+func (c *collabLiteClient) ListObjects(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error) {
 	out := new(ListResponse)
-	err := c.cc.Invoke(ctx, "/collabproto.CollabLite/ListDocuments", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/collabproto.CollabLite/ListObjects", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,10 +98,10 @@ func (c *collabLiteClient) ListDocuments(ctx context.Context, in *ListRequest, o
 // All implementations must embed UnimplementedCollabLiteServer
 // for forward compatibility
 type CollabLiteServer interface {
-	ProcessDocumentChanges(CollabLite_ProcessDocumentChangesServer) error
-	ImportDocument(context.Context, *ImportRequest) (*StatusResponse, error)
-	GetDocument(context.Context, *GetRequest) (*GetResponse, error)
-	ListDocuments(context.Context, *ListRequest) (*ListResponse, error)
+	ProcessObjectChanges(CollabLite_ProcessObjectChangesServer) error
+	ImportObject(context.Context, *ImportRequest) (*StatusResponse, error)
+	GetObject(context.Context, *GetRequest) (*GetResponse, error)
+	ListObjects(context.Context, *ListRequest) (*ListResponse, error)
 	mustEmbedUnimplementedCollabLiteServer()
 }
 
@@ -109,17 +109,17 @@ type CollabLiteServer interface {
 type UnimplementedCollabLiteServer struct {
 }
 
-func (UnimplementedCollabLiteServer) ProcessDocumentChanges(CollabLite_ProcessDocumentChangesServer) error {
-	return status.Errorf(codes.Unimplemented, "method ProcessDocumentChanges not implemented")
+func (UnimplementedCollabLiteServer) ProcessObjectChanges(CollabLite_ProcessObjectChangesServer) error {
+	return status.Errorf(codes.Unimplemented, "method ProcessObjectChanges not implemented")
 }
-func (UnimplementedCollabLiteServer) ImportDocument(context.Context, *ImportRequest) (*StatusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ImportDocument not implemented")
+func (UnimplementedCollabLiteServer) ImportObject(context.Context, *ImportRequest) (*StatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ImportObject not implemented")
 }
-func (UnimplementedCollabLiteServer) GetDocument(context.Context, *GetRequest) (*GetResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetDocument not implemented")
+func (UnimplementedCollabLiteServer) GetObject(context.Context, *GetRequest) (*GetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetObject not implemented")
 }
-func (UnimplementedCollabLiteServer) ListDocuments(context.Context, *ListRequest) (*ListResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListDocuments not implemented")
+func (UnimplementedCollabLiteServer) ListObjects(context.Context, *ListRequest) (*ListResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListObjects not implemented")
 }
 func (UnimplementedCollabLiteServer) mustEmbedUnimplementedCollabLiteServer() {}
 
@@ -134,82 +134,82 @@ func RegisterCollabLiteServer(s grpc.ServiceRegistrar, srv CollabLiteServer) {
 	s.RegisterService(&CollabLite_ServiceDesc, srv)
 }
 
-func _CollabLite_ProcessDocumentChanges_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(CollabLiteServer).ProcessDocumentChanges(&collabLiteProcessDocumentChangesServer{stream})
+func _CollabLite_ProcessObjectChanges_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(CollabLiteServer).ProcessObjectChanges(&collabLiteProcessObjectChangesServer{stream})
 }
 
-type CollabLite_ProcessDocumentChangesServer interface {
-	Send(*DocConfirmation) error
-	Recv() (*DocChange, error)
+type CollabLite_ProcessObjectChangesServer interface {
+	Send(*ObjectConfirmation) error
+	Recv() (*ObjectChange, error)
 	grpc.ServerStream
 }
 
-type collabLiteProcessDocumentChangesServer struct {
+type collabLiteProcessObjectChangesServer struct {
 	grpc.ServerStream
 }
 
-func (x *collabLiteProcessDocumentChangesServer) Send(m *DocConfirmation) error {
+func (x *collabLiteProcessObjectChangesServer) Send(m *ObjectConfirmation) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *collabLiteProcessDocumentChangesServer) Recv() (*DocChange, error) {
-	m := new(DocChange)
+func (x *collabLiteProcessObjectChangesServer) Recv() (*ObjectChange, error) {
+	m := new(ObjectChange)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func _CollabLite_ImportDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _CollabLite_ImportObject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ImportRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CollabLiteServer).ImportDocument(ctx, in)
+		return srv.(CollabLiteServer).ImportObject(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/collabproto.CollabLite/ImportDocument",
+		FullMethod: "/collabproto.CollabLite/ImportObject",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CollabLiteServer).ImportDocument(ctx, req.(*ImportRequest))
+		return srv.(CollabLiteServer).ImportObject(ctx, req.(*ImportRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _CollabLite_GetDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _CollabLite_GetObject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CollabLiteServer).GetDocument(ctx, in)
+		return srv.(CollabLiteServer).GetObject(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/collabproto.CollabLite/GetDocument",
+		FullMethod: "/collabproto.CollabLite/GetObject",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CollabLiteServer).GetDocument(ctx, req.(*GetRequest))
+		return srv.(CollabLiteServer).GetObject(ctx, req.(*GetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _CollabLite_ListDocuments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _CollabLite_ListObjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CollabLiteServer).ListDocuments(ctx, in)
+		return srv.(CollabLiteServer).ListObjects(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/collabproto.CollabLite/ListDocuments",
+		FullMethod: "/collabproto.CollabLite/ListObjects",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CollabLiteServer).ListDocuments(ctx, req.(*ListRequest))
+		return srv.(CollabLiteServer).ListObjects(ctx, req.(*ListRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -222,22 +222,22 @@ var CollabLite_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*CollabLiteServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "ImportDocument",
-			Handler:    _CollabLite_ImportDocument_Handler,
+			MethodName: "ImportObject",
+			Handler:    _CollabLite_ImportObject_Handler,
 		},
 		{
-			MethodName: "GetDocument",
-			Handler:    _CollabLite_GetDocument_Handler,
+			MethodName: "GetObject",
+			Handler:    _CollabLite_GetObject_Handler,
 		},
 		{
-			MethodName: "ListDocuments",
-			Handler:    _CollabLite_ListDocuments_Handler,
+			MethodName: "ListObjects",
+			Handler:    _CollabLite_ListObjects_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "ProcessDocumentChanges",
-			Handler:       _CollabLite_ProcessDocumentChanges_Handler,
+			StreamName:    "ProcessObjectChanges",
+			Handler:       _CollabLite_ProcessObjectChanges_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
