@@ -1,9 +1,9 @@
 package server
 
 import (
+	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/kpfaulkner/collablite/pkg/storage"
@@ -77,23 +77,14 @@ func (cls *CollabLiteServer) ProcessDocumentChanges(stream proto.CollabLite_Proc
 		// send change to be stored and processed.
 		currentProcessChannel <- docChange
 
-		// cant just have reading of currentResultChannel in separate goroutine since that channel CAN
-		// change if the user switches which document they're on.
-		// For now, just loop with a select.
-		done := false
-		for !done {
-			select {
-			case msg := <-currentResultChannel:
+		go func(outChan chan *proto.DocConfirmation) {
+			for msg := range outChan {
 				if err := stream.Send(msg); err != nil {
-					return err
+					fmt.Printf("BOOM cannot send result to client\n")
+					return
 				}
-
-			// FIXME(kpfaulkner) make 100ms configurable...
-			case <-time.After(100 * time.Millisecond):
-				// do nothing and break out for reading results loop.
-				done = true
 			}
-		}
+		}(currentResultChannel)
 	}
 
 	return nil
