@@ -48,6 +48,7 @@ func createTables(ctx context.Context, conn *sql.Conn) error {
 	return nil
 }
 
+// Add is really an upsert now. Might refactor update to be removed
 func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
 	ctx := context.Background()
 	txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: false})
