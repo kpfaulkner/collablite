@@ -107,6 +107,11 @@ func (p *Processor) ProcessObjectChanges(objectID string) error {
 
 	for objChange := range inChan {
 		// do stuff.... then return result.
+		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
+		if err != nil {
+			fmt.Printf("Unable to add to DB for objectID %s\n", objectID)
+			return err
+		}
 		res := proto.ObjectConfirmation{}
 		res.ObjectId = objChange.ObjectId
 		res.PropertyId = objChange.PropertyId

@@ -40,7 +40,7 @@ func NewDBSQLite(filename string) (*DBSQLite, error) {
 // createTables creates the tables required for storing the objects.
 func createTables(ctx context.Context, conn *sql.Conn) error {
 
-	_, err := conn.ExecContext(ctx, `create table if not exists object (id INTEGER PRIMARY KEY AUTOINCREMENT, object_id varchar(50), property_id varchar(50), data BLOB)`)
+	_, err := conn.ExecContext(ctx, `create table if not exists object (object_id varchar(50), property_id varchar(50), data BLOB, PRIMARY KEY (object_id, property_id))`)
 	if err != nil {
 		log.Printf("unable to create changes table: %v", err)
 		return err
@@ -57,8 +57,8 @@ func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
 
 	defer txn.Rollback()
 
-	if _, err := txn.ExecContext(ctx, "INSERT INTO object ( object_id, property_id,data) VALUES(?, ?, ?)",
-		objectID, propertyID, data); err != nil {
+	if _, err := txn.ExecContext(ctx, "INSERT INTO object ( object_id, property_id,data) VALUES(?, ?, ?) ON CONFLICT(object_id, property_id) DO UPDATE SET data=?",
+		objectID, propertyID, data, data); err != nil {
 		return fmt.Errorf("insert object: %w", err)
 	}
 	txn.Commit()
