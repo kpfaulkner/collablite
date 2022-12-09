@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kpfaulkner/collablite/pkg/storage"
 	"github.com/kpfaulkner/collablite/proto"
 )
@@ -23,11 +24,14 @@ var objectIDToChannels = make(map[string]ObjectIDChannels)
 type CollabLiteServer struct {
 	proto.UnimplementedCollabLiteServer
 	db storage.DB
+
+	processor *Processor
 }
 
 func NewCollabLiteServer(db storage.DB) *CollabLiteServer {
 	cls := CollabLiteServer{}
 	cls.db = db
+	cls.processor = NewProcessor(db)
 	return &cls
 }
 
@@ -41,12 +45,15 @@ func NewCollabLiteServer(db storage.DB) *CollabLiteServer {
 //   - Send result to client
 func (cls *CollabLiteServer) ProcessDocumentChanges(stream proto.CollabLite_ProcessDocumentChangesServer) error {
 
+	// clientID... need to figure out what to do here FIXME(kpfaulkner)
+	u, _ := uuid.NewUUID()
+	clientID := u.String()
+
 	// current* are used to push/receive changes from RPC stream to code that will
 	// actually process the changes and return the results.
 	var currentObjectID string
-	var currentProcessChannel chan *proto.DocChange
 	var currentResultChannel chan *proto.DocConfirmation
-
+	var currentProcessChannel chan *proto.DocChange
 	for {
 		docChange, err := stream.Recv()
 		if err == io.EOF {
@@ -58,8 +65,13 @@ func (cls *CollabLiteServer) ProcessDocumentChanges(stream proto.CollabLite_Proc
 
 		// if not currentObjectID then go get channels for this objectID
 		if docChange.ObjectId != currentObjectID {
+			inChan, outChan, err := cls.processor.RegisterClientWithDoc(clientID, docChange.ObjectId)
+			if err != nil {
+				return err
+			}
 			currentObjectID = docChange.ObjectId
-			currentProcessChannel, currentResultChannel = getChannelsForObjectID(docChange.ObjectId)
+			currentResultChannel = outChan
+			currentProcessChannel = inChan
 		}
 
 		// send change to be stored and processed.
@@ -68,7 +80,8 @@ func (cls *CollabLiteServer) ProcessDocumentChanges(stream proto.CollabLite_Proc
 		// cant just have reading of currentResultChannel in separate goroutine since that channel CAN
 		// change if the user switches which document they're on.
 		// For now, just loop with a select.
-		for {
+		done := false
+		for !done {
 			select {
 			case msg := <-currentResultChannel:
 				if err := stream.Send(msg); err != nil {
@@ -78,7 +91,7 @@ func (cls *CollabLiteServer) ProcessDocumentChanges(stream proto.CollabLite_Proc
 			// FIXME(kpfaulkner) make 100ms configurable...
 			case <-time.After(100 * time.Millisecond):
 				// do nothing and break out for reading results loop.
-				break
+				done = true
 			}
 		}
 	}

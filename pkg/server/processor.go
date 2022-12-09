@@ -25,10 +25,10 @@ type Processor struct {
 	objectChannels map[string]*ObjectIDChannels
 
 	// DB for storing docs.
-	db *storage.DB
+	db storage.DB
 }
 
-func NewProcessor(db *storage.DB) *Processor {
+func NewProcessor(db storage.DB) *Processor {
 	p := Processor{}
 	p.objectChannels = make(map[string]*ObjectIDChannels)
 	p.db = db
@@ -38,12 +38,14 @@ func NewProcessor(db *storage.DB) *Processor {
 // RegisterClientWithDoc registers a clientID and objectID with the processor.
 // This is used when a document is processed... it will contain a list of clients/channels
 // that need to get the results of the processing of a given document/object.
-func (p *Processor) RegisterClientWithDoc(clientID string, objectID string) error {
+// Will return inChan (specific for document) and results channel (specific for document AND clientid) to caller.
+func (p *Processor) RegisterClientWithDoc(clientID string, objectID string) (chan *proto.DocChange, chan *proto.DocConfirmation, error) {
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
 
 	var oc *ObjectIDChannels
-	if oc, ok := p.objectChannels[objectID]; !ok {
+	var ok bool
+	if oc, ok = p.objectChannels[objectID]; !ok {
 		oc = &ObjectIDChannels{}
 		oc.inChannel = make(chan *proto.DocChange, 1000) // FIXME(kpfaulkner) configure 1000
 		oc.outChannels = make(map[string]chan *proto.DocConfirmation)
@@ -53,10 +55,14 @@ func (p *Processor) RegisterClientWithDoc(clientID string, objectID string) erro
 		go p.ProcessDocChanges(objectID)
 	}
 
-	// create an out channel specific for the client. This will be used to send results.
-	oc.outChannels[clientID] = make(chan *proto.DocConfirmation, 1000) // FIXME(kpfaulkner) configure 1000
+	var clientObjectChannel chan *proto.DocConfirmation
+	if clientObjectChannel, ok = oc.outChannels[clientID]; !ok {
+		// create an out channel specific for the client. This will be used to send results.
+		oc.outChannels[clientID] = make(chan *proto.DocConfirmation, 1000) // FIXME(kpfaulkner) configure 1000
+		clientObjectChannel = oc.outChannels[clientID]
+	}
 
-	return nil
+	return oc.inChannel, clientObjectChannel, nil
 }
 
 func (p *Processor) UnregisterClientWithDoc(clientID string, objectID string) error {
