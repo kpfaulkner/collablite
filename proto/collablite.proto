@@ -38,7 +38,7 @@ service CollabLite {
 message DocChange {
   string object_id = 1;
   string property_path = 2;
-  string value = 3;  // dumb assumption is that we're just dealing with text (specifically JSON) for now.
+  string data = 3;  // dumb assumption is that we're just dealing with text (specifically JSON) for now.
   string unique_id = 4; // unique id for this change. This will be used to make sure clients can check if THEY sent the change or not.
 }
 
@@ -46,7 +46,7 @@ message DocChange {
 message DocConfirmation {
   string object_id = 1;
   string property_path = 2;
-  string value = 3;  // dumb assumption is that we're just dealing with text (specifically JSON) for now.
+  string data = 3;  // dumb assumption is that we're just dealing with text (specifically JSON) for now.
   string unique_id = 4; // unique id for this change.
 }
 

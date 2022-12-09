@@ -9,7 +9,7 @@ import (
 	"github.com/kpfaulkner/collablite/proto"
 )
 
-type ObjectIDChannels struct {
+type ObjectIDChannelsx struct {
 	processChannel chan *proto.DocChange
 	resultChannel  chan *proto.DocConfirmation
 }
@@ -75,7 +75,7 @@ func (cls *CollabLiteServer) ProcessDocumentChanges(stream proto.CollabLite_Proc
 					return err
 				}
 
-			// FIXME(kpfaulkner) make 100 configurable...
+			// FIXME(kpfaulkner) make 100ms configurable...
 			case <-time.After(100 * time.Millisecond):
 				// do nothing and break out for reading results loop.
 				break
@@ -92,12 +92,13 @@ func getChannelsForObjectID(id string) (chan *proto.DocChange, chan *proto.DocCo
 	channelLock.Lock()
 	defer channelLock.Unlock()
 
-	var channels ObjectIDChannels
+	//var channels ObjectIDChannels
 	if channels, ok := objectIDToChannels[id]; !ok {
-		channels.processChannel = make(chan *proto.DocChange, 10000) // FIXME(kpfaulkner) config the 10000
-		channels.resultChannel = make(chan *proto.DocConfirmation, 10000)
+		//channels.processChannel = make(chan *proto.DocChange, 1000) // FIXME(kpfaulkner) config the 1000
+		//channels.resultChannel = make(chan *proto.DocConfirmation, 1000)
 		objectIDToChannels[id] = channels
 	}
 
-	return channels.processChannel, channels.resultChannel
+	//return channels.processChannel, channels.resultChannel
+	return nil, nil
 }

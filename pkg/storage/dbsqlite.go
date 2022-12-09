@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+
+	_ "modernc.org/sqlite"
 )
 
 // DBSQLite implements the DB interface using SQLite
