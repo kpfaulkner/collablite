@@ -57,9 +57,11 @@ func (cls *CollabLiteServer) ProcessDocumentChanges(stream proto.CollabLite_Proc
 	for {
 		docChange, err := stream.Recv()
 		if err == io.EOF {
+			cls.processor.UnregisterClientWithDoc(clientID, currentObjectID)
 			return nil
 		}
 		if err != nil {
+			cls.processor.UnregisterClientWithDoc(clientID, currentObjectID)
 			return err
 		}
 
@@ -69,6 +71,10 @@ func (cls *CollabLiteServer) ProcessDocumentChanges(stream proto.CollabLite_Proc
 			if err != nil {
 				return err
 			}
+
+			// unregister
+			cls.processor.UnregisterClientWithDoc(clientID, currentObjectID)
+
 			currentObjectID = docChange.ObjectId
 			currentResultChannel = outChan
 			currentProcessChannel = inChan
