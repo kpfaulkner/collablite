@@ -62,8 +62,7 @@ message GetRequest {
 
 message GetResponse {
   string object_id = 1;
-  string object_name = 2;
-  bytes data = 3;
+  map<string, bytes> properties = 2;
 }
 
 // ListRequest lists all objects (for user).

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"sync"
@@ -94,4 +95,17 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 	}
 
 	return nil
+}
+
+func (cls *CollabLiteServer) GetObject(ctx context.Context, req *proto.GetRequest) (*proto.GetResponse, error) {
+
+	obj, err := cls.db.Get(req.ObjectId)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &proto.GetResponse{}
+	resp.ObjectId = obj.ObjectID
+	resp.Properties = obj.Properties
+	return resp, nil
 }
