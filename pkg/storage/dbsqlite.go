@@ -100,3 +100,33 @@ func (db *DBSQLite) Update(objectID string, propertyID string, data []byte) erro
 func (db *DBSQLite) Import(objectID string, properties map[string][]byte) (string, error) {
 	return "", nil
 }
+
+func (db *DBSQLite) Get(objectID string) (*Object, error) {
+	ctx := context.Background()
+	txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("unable to create transaction: %w", err)
+	}
+	defer txn.Rollback()
+
+	rows, err := txn.QueryContext(ctx, "SELECT  property_id, data FROM object WHERE object_id = ?", objectID)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("get object by object_id: %w", err)
+	}
+
+	objectProperties := make(map[string][]byte)
+	for rows.Next() {
+
+		var propertyID string
+		var data []byte
+
+		err := rows.Scan(&propertyID, &data)
+		if err != nil {
+			return nil, err
+		}
+		objectProperties[propertyID] = data
+	}
+
+	object := Object{ObjectID: objectID, Properties: objectProperties}
+	return &object, nil
+}
