@@ -36,8 +36,9 @@ func NewClient(serverAddr string) *Client {
 }
 
 func (c *Client) ProcessObjectChanges(objectChangeChan chan *proto.ObjectChange, objectConfirmationChan chan *proto.ObjectConfirmation) {
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
-	defer cancel()
+	//ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	ctx := context.Background()
+	//defer cancel()
 
 	stream, err := c.client.ProcessObjectChanges(ctx)
 	if err != nil {
@@ -51,70 +52,84 @@ func (c *Client) ProcessObjectChanges(objectChangeChan chan *proto.ObjectChange,
 	// FIXME(kpfaulkner) revisit this.
 	unconfirmedLocalChanges := make(map[string][]string)
 	unconfirmedLock := sync.Mutex{}
-	for {
+	
+	// read object changes and send to server.
+	go func() {
+		var count int64 = 0
+		t := time.Now()
+		for objChange := range objectChangeChan {
 
-		// read object changes and send to server.
-		go func() {
-			for objChange := range objectChangeChan {
-
-				// store change details for comparison with incoming confirmation
-				objectProperty := fmt.Sprintf("%s-%s", objChange.ObjectId, objChange.PropertyId)
-				unconfirmedLock.Lock()
-				if ids, ok := unconfirmedLocalChanges[objectProperty]; ok {
-					ids = append(ids, objChange.UniqueId)
-					unconfirmedLocalChanges[objectProperty] = ids
-				} else {
-					unconfirmedLocalChanges[objectProperty] = []string{objChange.UniqueId}
-				}
-				unconfirmedLock.Unlock()
-				if err := stream.Send(objChange); err != nil {
-
-					// FIXME(kpfaulkner) shouldn't be fatal...
-					log.Fatalf("%v.Send(%v) = %v", stream, objChange, err)
-				}
-			}
-		}()
-
-		var origUniqueIDs []string
-		var has bool
-
-		// receive object confirmation
-		for {
-			objectConfirmation, err := stream.Recv()
-			if err != nil {
-				// FIXME(kpfaulkner) shouldn't be fatal...
-				log.Fatalf("%v.Recv() got error %v, want %v", stream, err, nil)
-			}
-
-			objectProperty := fmt.Sprintf("%s-%s", objectConfirmation.ObjectId, objectConfirmation.PropertyId)
-
-			// way too much happening in this lock. FIXME(kpfaulkner)
+			// store change details for comparison with incoming confirmation
+			objectProperty := fmt.Sprintf("%s-%s", objChange.ObjectId, objChange.PropertyId)
 			unconfirmedLock.Lock()
-
-			// see if we have local changes related to this.
-			if origUniqueIDs, has = unconfirmedLocalChanges[objectProperty]; !has {
-				// do not have a local change for this object/property combo, so allow this through.
-				objectConfirmationChan <- objectConfirmation
+			if ids, ok := unconfirmedLocalChanges[objectProperty]; ok {
+				ids = append(ids, objChange.UniqueId)
+				unconfirmedLocalChanges[objectProperty] = ids
+			} else {
+				unconfirmedLocalChanges[objectProperty] = []string{objChange.UniqueId}
 			}
-
-			// if this is our change, let it through.
-			for i, origUniqueID := range origUniqueIDs {
-				if origUniqueID == objectConfirmation.UniqueId {
-
-					// remove from slice. Doing all this in a lock is stoooopid
-					unconfirmedLocalChanges[objectProperty] = append(origUniqueIDs[:i], origUniqueIDs[i+1:]...)
-					if len(unconfirmedLocalChanges[objectProperty]) == 0 {
-						delete(unconfirmedLocalChanges, objectProperty)
-					}
-					objectConfirmationChan <- objectConfirmation
-					break
-				}
-			}
-
-			// if we get here it means that we DO have a similar local change that has not been confirmed
-			// so it means that we drop this. Our unconfirmed local change is still yet to arrive which
-			// means it was generated after...  so this change will get wiped over anyway.
 			unconfirmedLock.Unlock()
+			if err := stream.Send(objChange); err != nil {
+
+				// FIXME(kpfaulkner) shouldn't be fatal...
+				log.Fatalf("%v.Send(%v) = %v", stream, objChange, err)
+			}
+			//fmt.Printf("SENT %v\n", objChange)
+
+			count++
+			if count%100 == 0 {
+				fmt.Printf("average send time: %v\n", time.Since(t).Milliseconds()/count)
+			}
+
 		}
+	}()
+
+	var origUniqueIDs []string
+	var has bool
+
+	// receive object confirmation
+	for {
+		objectConfirmation, err := stream.Recv()
+		if err != nil {
+			// FIXME(kpfaulkner) shouldn't be fatal...
+			log.Fatalf("%v.Recv() got error %v, want %v", stream, err, nil)
+		}
+
+		if objectConfirmation == nil {
+			fmt.Printf("dummy\n")
+		}
+		//fmt.Printf("RECV %v\n", objectConfirmation)
+
+		objectProperty := fmt.Sprintf("%s-%s", objectConfirmation.ObjectId, objectConfirmation.PropertyId)
+
+		// way too much happening in this lock. FIXME(kpfaulkner)
+		unconfirmedLock.Lock()
+
+		// see if we have local changes related to this.
+		if origUniqueIDs, has = unconfirmedLocalChanges[objectProperty]; !has {
+			// do not have a local change for this object/property combo, so allow this through.
+			objectConfirmationChan <- objectConfirmation
+		}
+
+		// if this is our change, let it through.
+		for i, origUniqueID := range origUniqueIDs {
+			if origUniqueID == objectConfirmation.UniqueId {
+
+				// remove from slice. Doing all this in a lock is stoooopid
+				unconfirmedLocalChanges[objectProperty] = append(origUniqueIDs[:i], origUniqueIDs[i+1:]...)
+				if len(unconfirmedLocalChanges[objectProperty]) == 0 {
+					delete(unconfirmedLocalChanges, objectProperty)
+				}
+				objectConfirmationChan <- objectConfirmation
+				break
+			}
+		}
+
+		// if we get here it means that we DO have a similar local change that has not been confirmed
+		// so it means that we drop this. Our unconfirmed local change is still yet to arrive which
+		// means it was generated after...  so this change will get wiped over anyway.
+		unconfirmedLock.Unlock()
+
 	}
+
 }

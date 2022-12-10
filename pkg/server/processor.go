@@ -51,6 +51,7 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 		oc.outChannels = make(map[string]chan *proto.ObjectConfirmation)
 		p.objectChannels[objectID] = oc
 
+		fmt.Printf("creating process goroutine %s\n", objectID)
 		// this is a new object being processed, so start a go routine to process it.
 		go p.ProcessObjectChanges(objectID)
 	}

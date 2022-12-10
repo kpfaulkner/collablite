@@ -55,6 +55,7 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 	var currentObjectID string
 	var currentResultChannel chan *proto.ObjectConfirmation
 	var currentProcessChannel chan *proto.ObjectChange
+
 	for {
 		objChange, err := stream.Recv()
 		if err == io.EOF {
@@ -79,19 +80,28 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 			currentObjectID = objChange.ObjectId
 			currentResultChannel = outChan
 			currentProcessChannel = inChan
+
+			fmt.Printf("assigned currentResultChannel %v\n", currentResultChannel)
+
+			// send message to client
+			go func(outChan chan *proto.ObjectConfirmation) {
+				fmt.Printf("begin sender\n")
+				for msg := range outChan {
+					fmt.Printf("sending %v\n", msg)
+					if err := stream.Send(msg); err != nil {
+						fmt.Printf("BOOM cannot send result to client\n")
+						return
+					}
+				}
+
+				fmt.Printf("leaving sender loop\n")
+			}(currentResultChannel)
+
 		}
 
 		// send change to be stored and processed.
 		currentProcessChannel <- objChange
 
-		go func(outChan chan *proto.ObjectConfirmation) {
-			for msg := range outChan {
-				if err := stream.Send(msg); err != nil {
-					fmt.Printf("BOOM cannot send result to client\n")
-					return
-				}
-			}
-		}(currentResultChannel)
 	}
 
 	return nil
