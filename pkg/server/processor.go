@@ -106,6 +106,8 @@ func (p *Processor) ProcessObjectChanges(objectID string) error {
 	}
 
 	for objChange := range inChan {
+
+		fmt.Printf("processing %v\n", objChange)
 		// do stuff.... then return result.
 		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
 		if err != nil {
