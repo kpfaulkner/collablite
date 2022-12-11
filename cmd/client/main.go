@@ -30,12 +30,12 @@ func main() {
 
 	if *send {
 		go func() {
-			for i := 0; i < 1000000; i++ {
+			for i := 0; i < 1000000000; i++ {
 				u, _ := uuid.NewUUID()
 				req := &proto.ObjectChange{
 					ObjectId:   fmt.Sprintf("testobject1"),
-					PropertyId: fmt.Sprintf("property-%s-%d", *id, rand.Intn(100)),
-					Data:       []byte(fmt.Sprintf("hello world-%d", i)),
+					PropertyId: fmt.Sprintf("property-%d", rand.Intn(100)),
+					Data:       []byte(fmt.Sprintf("hello world-%s-%d", *id, i)),
 					UniqueId:   u.String(),
 				}
 
