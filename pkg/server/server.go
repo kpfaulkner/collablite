@@ -2,13 +2,13 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/kpfaulkner/collablite/pkg/storage"
 	"github.com/kpfaulkner/collablite/proto"
+	log "github.com/sirupsen/logrus"
 )
 
 type ObjectIDChannelsx struct {
@@ -81,22 +81,19 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 			currentResultChannel = outChan
 			currentProcessChannel = inChan
 
-			fmt.Printf("assigned currentResultChannel %v\n", currentResultChannel)
-
 			// send message to client
 			go func(outChan chan *proto.ObjectConfirmation) {
-				fmt.Printf("begin sender\n")
+				log.Debugf("starting send goroutine for objectID %s", currentObjectID)
 				for msg := range outChan {
-					fmt.Printf("sending %v\n", msg)
 					if err := stream.Send(msg); err != nil {
-						fmt.Printf("BOOM cannot send result to client\n")
+						log.Errorf("unable to send message to client: %v", err)
+						// If error then we cannot update the client. Will disconnect client and force them to reconnect.
+						// In that reconnect process they'll get the entire document and be up to date.
 						return
 					}
 				}
-
-				fmt.Printf("leaving sender loop\n")
+				log.Debugf("ending send goroutine for objectID %s", currentObjectID)
 			}(currentResultChannel)
-
 		}
 
 		// send change to be stored and processed.
