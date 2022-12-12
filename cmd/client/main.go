@@ -26,17 +26,19 @@ func main() {
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
+
+	clientID, _ := uuid.NewUUID()
 	go client.ProcessObjectChanges(localChangeChannel, incomingChangesChannel)
 
 	if *send {
 		go func() {
 			for i := 0; i < 1000000000; i++ {
-				u, _ := uuid.NewUUID()
+
 				req := &proto.ObjectChange{
 					ObjectId:   fmt.Sprintf("testobject1"),
-					PropertyId: fmt.Sprintf("property-%d", rand.Intn(100)),
+					PropertyId: fmt.Sprintf("property-%03d", rand.Intn(100)),
 					Data:       []byte(fmt.Sprintf("hello world-%s-%d", *id, i)),
-					UniqueId:   u.String(),
+					UniqueId:   clientID.String(),
 				}
 
 				localChangeChannel <- req

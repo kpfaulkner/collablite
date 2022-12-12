@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 
 	"github.com/kpfaulkner/collablite/pkg/storage"
@@ -108,7 +109,8 @@ func (p *Processor) ProcessObjectChanges(objectID string) error {
 
 	for objChange := range inChan {
 
-		fmt.Printf("processing %v\n", objChange)
+		//fmt.Printf("processing %v\n", objChange)
+		fmt.Printf("no goroutines %d\n", runtime.NumGoroutine())
 		// do stuff.... then return result.
 		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
 		if err != nil {
@@ -125,8 +127,12 @@ func (p *Processor) ProcessObjectChanges(objectID string) error {
 		// this REALLY sucks holding the lock for this long, but will do for now.
 		// FIXME(kpfaulkner) MUST optimise this!
 		p.objectChannelLock.Lock()
-		for _, oc := range p.objectChannels[objectID].outChannels {
-			oc <- &res
+
+		// do a check for the objectID since the objects/clients might be nuked
+		if chans, ok := p.objectChannels[objectID]; ok {
+			for _, oc := range chans.outChannels {
+				oc <- &res
+			}
 		}
 		p.objectChannelLock.Unlock()
 	}
