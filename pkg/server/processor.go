@@ -7,6 +7,7 @@ import (
 
 	"github.com/kpfaulkner/collablite/pkg/storage"
 	"github.com/kpfaulkner/collablite/proto"
+	log "github.com/sirupsen/logrus"
 )
 
 // ObjectIDChannels holds input channel (original objectChange) and slice of
@@ -52,7 +53,7 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 		oc.outChannels = make(map[string]chan *proto.ObjectConfirmation)
 		p.objectChannels[objectID] = oc
 
-		fmt.Printf("creating process goroutine %s\n", objectID)
+		log.Debugf("creating process goroutine %s\n", objectID)
 		// this is a new object being processed, so start a go routine to process it.
 		go p.ProcessObjectChanges(objectID)
 	}
@@ -103,18 +104,18 @@ func (p *Processor) ProcessObjectChanges(objectID string) error {
 	// get in chan
 	inChan, err := p.getInChanForObjectID(objectID)
 	if err != nil {
-		fmt.Printf("Unable to process objectID %s\n", objectID)
+		log.Errorf("Unable to process objectID %s\n", objectID)
 		return err
 	}
 
 	for objChange := range inChan {
 
-		//fmt.Printf("processing %v\n", objChange)
-		fmt.Printf("no goroutines %d\n", runtime.NumGoroutine())
+		log.Debugf("no goroutines %d\n", runtime.NumGoroutine())
+
 		// do stuff.... then return result.
 		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
 		if err != nil {
-			fmt.Printf("Unable to add to DB for objectID %s\n", objectID)
+			log.Errorf("Unable to add to DB for objectID %s\n", objectID)
 			return err
 		}
 		res := proto.ObjectConfirmation{}
