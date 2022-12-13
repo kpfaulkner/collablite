@@ -6,5 +6,5 @@
 - Unit tests
 - Documentation
 - Postgres(?) support in addition to Sqlite
-* Currently client wont get receive updates until it does one itself. Allow it to just register for a stream of updates.
+- ~~Currently client wont get receive updates until it does one itself. Allow it to just register for a stream of updates.~~
   Done. Just make sure client sends empty change with the appropriate objectid
