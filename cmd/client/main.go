@@ -47,8 +47,18 @@ func main() {
 		}()
 	}
 
-	for _ = range incomingChangesChannel {
-		//fmt.Printf("confirmation: %v\n", resp)
+	// even if not sending changes... send an empty one to indicate what we want to listen to.
+	req := &proto.ObjectChange{
+		ObjectId:   fmt.Sprintf("testobject1"),
+		PropertyId: "",
+		Data:       nil,
+		UniqueId:   "",
+	}
+
+	localChangeChannel <- req
+
+	for resp := range incomingChangesChannel {
+		fmt.Printf("confirmation: %v\n", resp)
 	}
 
 	wg.Wait()
