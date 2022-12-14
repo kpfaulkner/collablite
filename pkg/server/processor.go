@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/kpfaulkner/collablite/pkg/storage"
 	"github.com/kpfaulkner/collablite/proto"
@@ -21,7 +22,7 @@ type ObjectIDChannels struct {
 
 // Processor takes the objectChange (from channel), stores to the DB and return objectConfirmation via channel
 type Processor struct {
-	objectChannelLock sync.Mutex
+	objectChannelLock sync.RWMutex
 
 	// map of object id to channels used for input and output.
 	objectChannels map[string]*ObjectIDChannels
@@ -56,6 +57,11 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 		log.Debugf("creating process goroutine %s\n", objectID)
 		// this is a new object being processed, so start a go routine to process it.
 		go p.ProcessObjectChanges(objectID)
+	} else {
+
+		// already registered... BUT... will allow this to proceed and not return error.
+		// At worst, the client will get the entire document (which they should already have).
+		log.Warnf("RegisterClientWithObject called for objectID %s but already exists\n", objectID)
 	}
 
 	var clientObjectChannel chan *proto.ObjectConfirmation
@@ -64,6 +70,12 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 		oc.outChannels[clientID] = make(chan *proto.ObjectConfirmation, 1000) // FIXME(kpfaulkner) configure 1000
 		clientObjectChannel = oc.outChannels[clientID]
 	}
+
+	// new client... populate with current state of object.
+	// FIXME(kpfaulkner) This is a problem. If the number of properties for this object is greater than the channel
+	// buffer size, then the channel will block, populateDocIntoClientChannel wont return...  and we're stuck in
+	// a deadlock with the defer NOT unlocking the lock. Need to fix this.
+	p.populateDocIntoClientChannel(objectID, clientObjectChannel)
 
 	return oc.inChannel, clientObjectChannel, nil
 }
@@ -99,6 +111,8 @@ func (p *Processor) getInChanForObjectID(objectID string) (chan *proto.ObjectCha
 	return nil, fmt.Errorf("objectID not found")
 }
 
+// ProcessObjectChanges is purely for reading the incoming changes for a specific object
+// writing it to storage and then sending the results to all clients that are listening
 func (p *Processor) ProcessObjectChanges(objectID string) error {
 
 	// get in chan
@@ -127,15 +141,51 @@ func (p *Processor) ProcessObjectChanges(objectID string) error {
 		// loop through all out channels and send result.
 		// this REALLY sucks holding the lock for this long, but will do for now.
 		// FIXME(kpfaulkner) MUST optimise this!
-		p.objectChannelLock.Lock()
+		p.objectChannelLock.RLock()
 
 		// do a check for the objectID since the objects/clients might be nuked
+		// This might be a point of optimisation. Constantly checking that map is going to be expensive (gut feel, NOT
+		// measured). Could have a flag to indicate IF the clients registered for this object have changed.
+		// IF there is a change, then we read from map, otherwise we used something we've cached.
+		// FIXME(kpfaulkner) major problem!
 		if chans, ok := p.objectChannels[objectID]; ok {
 			for _, oc := range chans.outChannels {
-				oc <- &res
+				select {
+				case oc <- &res:
+					// nothing...  body required
+				case <-time.After(10 * time.Millisecond):
+					// if we cannot send the data to the client for some reason... just drop the message?
+					log.Warnf("Unable to send to client. Channel full? Dropping message")
+				}
 			}
 		}
-		p.objectChannelLock.Unlock()
+		p.objectChannelLock.RUnlock()
+	}
+	return nil
+}
+
+// populateDocIntoClientChannel populates an entire object into a channel.
+// This is used when clients are freshly registered for a document. Before they can make use of the updates
+// they need to know the current state of the document.
+// It is assumed ( FIXME(kpfaulkner) sort this out!) that the client is already registered with the objectID
+// and that a lock is already across the objectID from the caller. Bet this will bite me one day...
+func (p *Processor) populateDocIntoClientChannel(objectID string, clientObjectChannel chan *proto.ObjectConfirmation) error {
+	// read entire object here and push to clientObjectChannel? Doesn't feel like this is the right place to do this?
+	obj, err := p.db.Get(objectID)
+	if err != nil {
+		log.Errorf("unable to retrieve object %s during client registration", objectID)
+		return err
+	}
+
+	fmt.Printf("OBJ to populate is %v\n", *obj)
+
+	for pName, pValue := range obj.Properties {
+		res := proto.ObjectConfirmation{}
+		res.ObjectId = objectID
+		res.PropertyId = pName
+		res.UniqueId = "" // empty unique id means the client should just accept the property. HACK
+		res.Data = pValue
+		clientObjectChannel <- &res
 	}
 	return nil
 }
