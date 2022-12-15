@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"io"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/kpfaulkner/collablite/pkg/storage"
@@ -16,8 +15,6 @@ type ObjectIDChannelsx struct {
 	resultChannel  chan *proto.ObjectConfirmation
 }
 
-// used to lock access to objectID -> channels map.
-var channelLock sync.Mutex
 var objectIDToChannels = make(map[string]ObjectIDChannels)
 
 // CollabLiteServer receives gRPC requests from clients and modifies the
@@ -39,16 +36,14 @@ func NewCollabLiteServer(db storage.DB) *CollabLiteServer {
 // ProcessObjectChanges main loop of processing object changes.
 // Process is:
 //   - Receive change from client
-//   - Get process channel associated with objectID
-//   - Get result channel associated with object ID
-//   - Send change to process channel
-//   - Read result from result channel
-//   - Send result to client
+//   - If new objectID, then register client against new Object
+//   - If new objectID unregister client from old object
+//   - If new objectID start a goroutine to read from client specific channel and send to client over gRPC
+//   - Send the change to be processed via channel.
 func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_ProcessObjectChangesServer) error {
 
 	// clientID... need to figure out what to do here FIXME(kpfaulkner)
-	u, _ := uuid.NewUUID()
-	clientID := u.String()
+	clientID := uuid.New().String()
 
 	// current* are used to push/receive changes from RPC stream to code that will
 	// actually process the changes and return the results.
@@ -67,6 +62,7 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 			return err
 		}
 
+		log.Debugf("received object change %v", *objChange)
 		// if not currentObjectID then go get channels for this objectID
 		if objChange.ObjectId != currentObjectID {
 			inChan, outChan, err := cls.processor.RegisterClientWithObject(clientID, objChange.ObjectId)
@@ -81,7 +77,8 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 			currentResultChannel = outChan
 			currentProcessChannel = inChan
 
-			// send message to client
+			// Goroutine is specific to this client. Read the outChan and send to client.
+			// Outchan is populated by ProcessObjectChanges
 			go func(outChan chan *proto.ObjectConfirmation) {
 				log.Debugf("starting send goroutine for objectID %s", currentObjectID)
 				for msg := range outChan {
@@ -97,6 +94,7 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 		}
 
 		// send change to be stored and processed.
+		// Potential blocking point. FIXME(kpfaulkner) investigate
 		currentProcessChannel <- objChange
 
 	}

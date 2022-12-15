@@ -46,6 +46,8 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
 
+	log.Debugf("Registering client %s against object %s", clientID, objectID)
+
 	var oc *ObjectIDChannels
 	var ok bool
 	if oc, ok = p.objectChannels[objectID]; !ok {
@@ -55,8 +57,9 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 		p.objectChannels[objectID] = oc
 
 		log.Debugf("creating process goroutine %s\n", objectID)
+
 		// this is a new object being processed, so start a go routine to process it.
-		go p.ProcessObjectChanges(objectID)
+		go p.ProcessObjectChanges(objectID, oc.inChannel)
 	} else {
 
 		// already registered... BUT... will allow this to proceed and not return error.
@@ -83,6 +86,8 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 func (p *Processor) UnregisterClientWithObject(clientID string, objectID string) error {
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
+
+	log.Debugf("Unregistering client %s against object %s", clientID, objectID)
 
 	if oc, ok := p.objectChannels[objectID]; ok {
 		if clientOutChan, ok := oc.outChannels[clientID]; ok {
@@ -113,23 +118,16 @@ func (p *Processor) getInChanForObjectID(objectID string) (chan *proto.ObjectCha
 
 // ProcessObjectChanges is purely for reading the incoming changes for a specific object
 // writing it to storage and then sending the results to all clients that are listening
-func (p *Processor) ProcessObjectChanges(objectID string) error {
-
-	// get in chan
-	inChan, err := p.getInChanForObjectID(objectID)
-	if err != nil {
-		log.Errorf("Unable to process objectID %s\n", objectID)
-		return err
-	}
+func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.ObjectChange) error {
 
 	for objChange := range inChan {
 
-		log.Debugf("no goroutines %d\n", runtime.NumGoroutine())
+		log.Debugf("no goroutines %d", runtime.NumGoroutine())
 
 		// do stuff.... then return result.
 		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
 		if err != nil {
-			log.Errorf("Unable to add to DB for objectID %s\n", objectID)
+			log.Errorf("Unable to add to DB for objectID %s", objectID)
 			return err
 		}
 		res := proto.ObjectConfirmation{}
@@ -141,7 +139,7 @@ func (p *Processor) ProcessObjectChanges(objectID string) error {
 		// loop through all out channels and send result.
 		// this REALLY sucks holding the lock for this long, but will do for now.
 		// FIXME(kpfaulkner) MUST optimise this!
-		p.objectChannelLock.RLock()
+		p.objectChannelLock.Lock()
 
 		// do a check for the objectID since the objects/clients might be nuked
 		// This might be a point of optimisation. Constantly checking that map is going to be expensive (gut feel, NOT
@@ -149,7 +147,8 @@ func (p *Processor) ProcessObjectChanges(objectID string) error {
 		// IF there is a change, then we read from map, otherwise we used something we've cached.
 		// FIXME(kpfaulkner) major problem!
 		if chans, ok := p.objectChannels[objectID]; ok {
-			for _, oc := range chans.outChannels {
+			for chanNo, oc := range chans.outChannels {
+				fmt.Printf("ch %d : len %d\n", chanNo, len(oc))
 				select {
 				case oc <- &res:
 					// nothing...  body required
@@ -159,7 +158,7 @@ func (p *Processor) ProcessObjectChanges(objectID string) error {
 				}
 			}
 		}
-		p.objectChannelLock.RUnlock()
+		p.objectChannelLock.Unlock()
 	}
 	return nil
 }
@@ -177,7 +176,7 @@ func (p *Processor) populateDocIntoClientChannel(objectID string, clientObjectCh
 		return err
 	}
 
-	fmt.Printf("OBJ to populate is %v\n", *obj)
+	log.Debugf("POPULATING ENTIRE OBJECT %s\n", obj.ObjectID)
 
 	for pName, pValue := range obj.Properties {
 		res := proto.ObjectConfirmation{}

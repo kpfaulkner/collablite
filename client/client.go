@@ -3,9 +3,10 @@ package client
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
-	"time"
+
+	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/kpfaulkner/collablite/proto"
 	"google.golang.org/grpc"
@@ -15,6 +16,18 @@ import (
 // Client is the client API for CollabLite service.
 type Client struct {
 	client proto.CollabLiteClient
+
+	// is called when we receive a confirmation from the server.
+	objectConfirmationCallback func(*ChangeConfirmation) error
+
+	// stream to gRPC server
+	stream proto.CollabLite_ProcessObjectChangesClient
+
+	// used to track local changes (yet to be confirmed by server)
+	unconfirmedLocalChanges map[string][]string
+
+	// and associated lock
+	unconfirmedLock sync.Mutex
 }
 
 func NewClient(serverAddr string) *Client {
@@ -28,99 +41,128 @@ func NewClient(serverAddr string) *Client {
 		log.Fatalf("fail to dial: %v", err)
 	}
 
-	//defer conn.Close()
-
 	client := proto.NewCollabLiteClient(conn)
-	c := &Client{client: client}
+
+	// Make channel size configurable FIXME(kpfaulkner)
+	c := &Client{client: client,
+		unconfirmedLocalChanges: make(map[string][]string),
+	}
 	return c
 }
 
-func (c *Client) ProcessObjectChanges(objectChangeChan chan *proto.ObjectChange, objectConfirmationChan chan *proto.ObjectConfirmation) {
-	//ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
-	ctx := context.Background()
-	//defer cancel()
+// RegisterCallback is called whenever a change for the object being watched is received.
+func (c *Client) RegisterCallback(cb func(*ChangeConfirmation) error) error {
+	c.objectConfirmationCallback = cb
+	return nil
+}
+
+// SendChange sends the change to the server for processing
+func (c *Client) SendChange(outgoingChange *OutgoingChange) error {
+	//t := time.Now()
+
+	// convert to proto struct
+	objChange := convertOutgoingChangeToProto(outgoingChange)
+
+	// store change details for comparison with incoming confirmation
+	objectProperty := fmt.Sprintf("%s-%s", objChange.ObjectId, objChange.PropertyId)
+	c.unconfirmedLock.Lock()
+	if ids, ok := c.unconfirmedLocalChanges[objectProperty]; ok {
+		ids = append(ids, objChange.UniqueId)
+		c.unconfirmedLocalChanges[objectProperty] = ids
+	} else {
+		c.unconfirmedLocalChanges[objectProperty] = []string{objChange.UniqueId}
+	}
+	c.unconfirmedLock.Unlock()
+
+	//tt := time.Now()
+	fmt.Printf("start send\n")
+	if err := c.stream.Send(objChange); err != nil {
+		// FIXME(kpfaulkner) shouldn't be fatal...
+		log.Errorf("%v.Send(%v) = %v", c.stream, objChange, err)
+		return err
+	}
+	fmt.Printf("end send\n")
+	//log.Debugf("stream send took %d ms", time.Since(tt).Milliseconds())
+
+	//log.Debugf("send took: %v", time.Since(t).Milliseconds())
+
+	return nil
+}
+
+// Connect creates the stream against the server
+func (c *Client) Connect(ctx context.Context) error {
 
 	stream, err := c.client.ProcessObjectChanges(ctx)
 	if err != nil {
-		log.Fatalf("%v.ProcessObjectChanges(_) = _, %v", c.client, err)
+		log.Errorf("%v.ProcessObjectChanges(_) = _, %v", c.client, err)
+		return err
 	}
 
-	// first key is objectid-propertyid, value is our unique ID
-	// So if there is a match for objectid-propertyid but it is NOT ours (unique ie) then drop
-	// the incoming change. Given we might have multiple changes for the same obj/prop combo, the
-	// value is a slice of unique ids... means that we'll need to manually trawl through the slice
-	// FIXME(kpfaulkner) revisit this.
-	unconfirmedLocalChanges := make(map[string][]string)
-	unconfirmedLock := sync.Mutex{}
-	
-	// read object changes and send to server.
-	go func() {
-		var count int64 = 0
-		t := time.Now()
-		for objChange := range objectChangeChan {
+	c.stream = stream
+	return nil
+}
 
-			// store change details for comparison with incoming confirmation
-			objectProperty := fmt.Sprintf("%s-%s", objChange.ObjectId, objChange.PropertyId)
-			unconfirmedLock.Lock()
-			if ids, ok := unconfirmedLocalChanges[objectProperty]; ok {
-				ids = append(ids, objChange.UniqueId)
-				unconfirmedLocalChanges[objectProperty] = ids
-			} else {
-				unconfirmedLocalChanges[objectProperty] = []string{objChange.UniqueId}
-			}
-			unconfirmedLock.Unlock()
-			if err := stream.Send(objChange); err != nil {
+// RegisterToObject sends a message to the server indicating that the client is listening for changes
+// for a particular ObjectID. This only needs to be done once and only if we're passively listening and
+// NOT sending data ourselves. If we're sending data we do not need to perform this.
+func (c *Client) RegisterToObject(ctx context.Context, objectID string) error {
 
-				// FIXME(kpfaulkner) shouldn't be fatal...
-				log.Fatalf("%v.Send(%v) = %v", stream, objChange, err)
-			}
-			//fmt.Printf("SENT %v\n", objChange)
+	// even if not sending changes... send an empty one to indicate what we want to listen to.
+	req := OutgoingChange{
+		ObjectID:   objectID,
+		PropertyID: "",
+		Data:       nil,
+	}
 
-			count++
-			if count%100 == 0 {
-				fmt.Printf("average send time: %v\n", time.Since(t).Milliseconds()/count)
-			}
+	if err := c.SendChange(&req); err != nil {
+		log.Errorf("failed to send change: %v", err)
+		return err
+	}
 
-		}
-	}()
+	return nil
+}
+
+// Listen will loop for incoming changes from the server. Any changes that are received
+// and are NOT discarded (due to modifying the same object/property as a local change)
+// will be passed to the callback registered via RegisterCallback
+func (c *Client) Listen(ctx context.Context) error {
 
 	var origUniqueIDs []string
-	var has bool
+	var hasLocalChange bool
 
 	// receive object confirmation
 	for {
-		objectConfirmation, err := stream.Recv()
+		objectConfirmation, err := c.stream.Recv()
 		if err != nil {
-			// FIXME(kpfaulkner) shouldn't be fatal...
-			log.Fatalf("%v.Recv() got error %v, want %v", stream, err, nil)
+			log.Errorf("%v.Recv() got error %v, want %v", c.stream, err, nil)
+			return err
 		}
-
-		if objectConfirmation == nil {
-			fmt.Printf("dummy\n")
-		}
-		//fmt.Printf("RECV %v\n", objectConfirmation)
 
 		objectProperty := fmt.Sprintf("%s-%s", objectConfirmation.ObjectId, objectConfirmation.PropertyId)
 
 		// way too much happening in this lock. FIXME(kpfaulkner)
-		unconfirmedLock.Lock()
+		c.unconfirmedLock.Lock()
 
-		// see if we have local changes related to this.
-		if origUniqueIDs, has = unconfirmedLocalChanges[objectProperty]; !has {
+		// If this change doesn't match any property change performed locally, then allow it through and
+		// call the callback
+		if origUniqueIDs, hasLocalChange = c.unconfirmedLocalChanges[objectProperty]; !hasLocalChange {
 			// do not have a local change for this object/property combo, so allow this through.
-			objectConfirmationChan <- objectConfirmation
+			c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
 		}
 
-		// if this is our change, let it through.
+		// If we've got here, then we know we have a local change for this object/property combo.
 		for i, origUniqueID := range origUniqueIDs {
+			// find the specific message.
 			if origUniqueID == objectConfirmation.UniqueId {
 
 				// remove from slice. Doing all this in a lock is stoooopid
-				unconfirmedLocalChanges[objectProperty] = append(origUniqueIDs[:i], origUniqueIDs[i+1:]...)
-				if len(unconfirmedLocalChanges[objectProperty]) == 0 {
-					delete(unconfirmedLocalChanges, objectProperty)
+				c.unconfirmedLocalChanges[objectProperty] = append(origUniqueIDs[:i], origUniqueIDs[i+1:]...)
+				if len(c.unconfirmedLocalChanges[objectProperty]) == 0 {
+					delete(c.unconfirmedLocalChanges, objectProperty)
 				}
-				objectConfirmationChan <- objectConfirmation
+
+				// this is our change... pass it through.
+				c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
 				break
 			}
 		}
@@ -128,8 +170,28 @@ func (c *Client) ProcessObjectChanges(objectChangeChan chan *proto.ObjectChange,
 		// if we get here it means that we DO have a similar local change that has not been confirmed
 		// so it means that we drop this. Our unconfirmed local change is still yet to arrive which
 		// means it was generated after...  so this change will get wiped over anyway.
-		unconfirmedLock.Unlock()
-
+		c.unconfirmedLock.Unlock()
 	}
 
+	return nil
+}
+
+// convert models to proto structs
+func convertOutgoingChangeToProto(outgoingChange *OutgoingChange) *proto.ObjectChange {
+	return &proto.ObjectChange{
+		ObjectId:   outgoingChange.ObjectID,
+		PropertyId: outgoingChange.PropertyID,
+		Data:       outgoingChange.Data,
+
+		// add unique id to track local changes.
+		UniqueId: uuid.New().String(),
+	}
+}
+
+func convertProtoToChangeConfirmation(confirmedChange *proto.ObjectConfirmation) *ChangeConfirmation {
+	return &ChangeConfirmation{
+		ObjectID:   confirmedChange.ObjectId,
+		PropertyID: confirmedChange.PropertyId,
+		Data:       confirmedChange.Data,
+	}
 }

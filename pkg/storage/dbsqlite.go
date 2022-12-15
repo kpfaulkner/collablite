@@ -4,7 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	_ "modernc.org/sqlite"
 )
@@ -57,10 +58,17 @@ func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
 	}
 
 	defer txn.Rollback()
+	insertObjectStatement := `INSERT INTO object ( object_id, property_id,data) VALUES(?, ?, ?) ON CONFLICT(object_id, property_id) DO UPDATE SET data=?`
+	statement, err := txn.PrepareContext(ctx, insertObjectStatement)
+	if err != nil {
+		log.Errorf("unable to prepare statement: %v", err)
+		return fmt.Errorf("unable to prepare statement: %w", err)
+	}
 
-	if _, err := txn.ExecContext(ctx, "INSERT INTO object ( object_id, property_id,data) VALUES(?, ?, ?) ON CONFLICT(object_id, property_id) DO UPDATE SET data=?",
-		objectID, propertyID, data, data); err != nil {
-		return fmt.Errorf("insert object: %w", err)
+	_, err = statement.Exec(objectID, propertyID, data, data)
+	if err != nil {
+		log.Errorf("unable to insert object %v", err)
+		return fmt.Errorf("unable to insert object: %w", err)
 	}
 	txn.Commit()
 
@@ -89,10 +97,19 @@ func (db *DBSQLite) Update(objectID string, propertyID string, data []byte) erro
 	}
 	defer txn.Rollback()
 
-	if _, err := txn.ExecContext(ctx, "UPDATE object SET data = ? where object_id = ? and property_id = ?",
-		data, objectID, propertyID); err != nil {
-		return fmt.Errorf("update object of %s: %w", objectID, err)
+	updateObjectStatement := `UPDATE object SET data = ? where object_id = ? and property_id = ?`
+	statement, err := txn.PrepareContext(ctx, updateObjectStatement)
+	if err != nil {
+		log.Errorf("unable to prepare statement: %v", err)
+		return fmt.Errorf("unable to prepare statement: %w", err)
 	}
+
+	_, err = statement.Exec(data, objectID, propertyID)
+	if err != nil {
+		log.Errorf("unable to update object %v", err)
+		return fmt.Errorf("unable to update object: %w", err)
+	}
+
 	txn.Commit()
 	return nil
 }
@@ -109,7 +126,14 @@ func (db *DBSQLite) Get(objectID string) (*Object, error) {
 	}
 	defer txn.Rollback()
 
-	rows, err := txn.QueryContext(ctx, "SELECT  property_id, data FROM object WHERE object_id = ?", objectID)
+	queryObjectStatement := `SELECT  property_id, data FROM object WHERE object_id = ?`
+	statement, err := txn.PrepareContext(ctx, queryObjectStatement)
+	if err != nil {
+		log.Errorf("unable to prepare statement: %v", err)
+		return nil, fmt.Errorf("unable to prepare statement: %w", err)
+	}
+
+	rows, err := statement.QueryContext(ctx, objectID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("get object by object_id: %w", err)
 	}
