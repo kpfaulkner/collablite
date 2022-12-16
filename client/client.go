@@ -62,7 +62,6 @@ func (c *Client) SendChange(outgoingChange *OutgoingChange) error {
 
 	// convert to proto struct
 	objChange := convertOutgoingChangeToProto(outgoingChange)
-
 	// store change details for comparison with incoming confirmation
 	objectProperty := fmt.Sprintf("%s-%s", objChange.ObjectId, objChange.PropertyId)
 	c.unconfirmedLock.Lock()
@@ -74,14 +73,15 @@ func (c *Client) SendChange(outgoingChange *OutgoingChange) error {
 	}
 	c.unconfirmedLock.Unlock()
 
+	if objectProperty == "graphical-0-0" {
+		log.Debugf("0x0!!!")
+	}
 	//tt := time.Now()
-	fmt.Printf("start send\n")
 	if err := c.stream.Send(objChange); err != nil {
 		// FIXME(kpfaulkner) shouldn't be fatal...
 		log.Errorf("%v.Send(%v) = %v", c.stream, objChange, err)
 		return err
 	}
-	fmt.Printf("end send\n")
 	//log.Debugf("stream send took %d ms", time.Since(tt).Milliseconds())
 
 	//log.Debugf("send took: %v", time.Since(t).Milliseconds())
@@ -100,6 +100,32 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	c.stream = stream
 	return nil
+}
+
+// GetObject returns the entire object from the server.
+// Used for initial loading etc.
+func (c *Client) GetObject(objectID string) ([]ChangeConfirmation, error) {
+	resp, err := c.client.GetObject(context.Background(), &proto.GetRequest{
+		ObjectId: objectID,
+	})
+
+	if err != nil {
+		log.Errorf("failed to get object: %v", err)
+		return nil, err
+	}
+
+	changes := make([]ChangeConfirmation, len(resp.Properties))
+	i := 0
+	for k, v := range resp.Properties {
+		changes[i] = ChangeConfirmation{
+			ObjectID:   resp.ObjectId,
+			PropertyID: k,
+			Data:       v,
+		}
+		i++
+	}
+
+	return changes, nil
 }
 
 // RegisterToObject sends a message to the server indicating that the client is listening for changes
@@ -130,6 +156,7 @@ func (c *Client) Listen(ctx context.Context) error {
 	var origUniqueIDs []string
 	var hasLocalChange bool
 
+	count := 0
 	// receive object confirmation
 	for {
 		objectConfirmation, err := c.stream.Recv()
@@ -137,23 +164,37 @@ func (c *Client) Listen(ctx context.Context) error {
 			log.Errorf("%v.Recv() got error %v, want %v", c.stream, err, nil)
 			return err
 		}
-
+		count++
+		if count%100 == 0 {
+			log.Debugf("Received %d", count)
+		}
 		objectProperty := fmt.Sprintf("%s-%s", objectConfirmation.ObjectId, objectConfirmation.PropertyId)
 
 		// way too much happening in this lock. FIXME(kpfaulkner)
 		c.unconfirmedLock.Lock()
 
+		if objectProperty == "graphical-0-0" {
+			log.Debugf("listen 0x0")
+		}
+
 		// If this change doesn't match any property change performed locally, then allow it through and
 		// call the callback
 		if origUniqueIDs, hasLocalChange = c.unconfirmedLocalChanges[objectProperty]; !hasLocalChange {
+
+			//log.Debugf("not waiting on local confirmation %s", objectProperty)
 			// do not have a local change for this object/property combo, so allow this through.
 			c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
 		}
 
+		confirmedLocalChange := false
 		// If we've got here, then we know we have a local change for this object/property combo.
 		for i, origUniqueID := range origUniqueIDs {
 			// find the specific message.
 			if origUniqueID == objectConfirmation.UniqueId {
+
+				if objectProperty == "graphical-0-0" {
+					log.Debugf("listen 0x0")
+				}
 
 				// remove from slice. Doing all this in a lock is stoooopid
 				c.unconfirmedLocalChanges[objectProperty] = append(origUniqueIDs[:i], origUniqueIDs[i+1:]...)
@@ -161,12 +202,17 @@ func (c *Client) Listen(ctx context.Context) error {
 					delete(c.unconfirmedLocalChanges, objectProperty)
 				}
 
+				confirmedLocalChange = true
+				//log.Debugf("confirming local change %s", objectProperty)
 				// this is our change... pass it through.
 				c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
 				break
 			}
 		}
 
+		if hasLocalChange && !confirmedLocalChange {
+			log.Debugf("CONFLICT.. but dropping %s", objectProperty)
+		}
 		// if we get here it means that we DO have a similar local change that has not been confirmed
 		// so it means that we drop this. Our unconfirmed local change is still yet to arrive which
 		// means it was generated after...  so this change will get wiped over anyway.
@@ -174,6 +220,17 @@ func (c *Client) Listen(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (c *Client) GetChangeCount() int {
+
+	c.unconfirmedLock.Lock()
+	count := 0
+	for _, v := range c.unconfirmedLocalChanges {
+		count += len(v)
+	}
+	c.unconfirmedLock.Unlock()
+	return count
 }
 
 // convert models to proto structs

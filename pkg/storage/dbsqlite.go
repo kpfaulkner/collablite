@@ -64,6 +64,7 @@ func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
 		log.Errorf("unable to prepare statement: %v", err)
 		return fmt.Errorf("unable to prepare statement: %w", err)
 	}
+	defer statement.Close()
 
 	_, err = statement.Exec(objectID, propertyID, data, data)
 	if err != nil {
@@ -103,6 +104,7 @@ func (db *DBSQLite) Update(objectID string, propertyID string, data []byte) erro
 		log.Errorf("unable to prepare statement: %v", err)
 		return fmt.Errorf("unable to prepare statement: %w", err)
 	}
+	defer statement.Close()
 
 	_, err = statement.Exec(data, objectID, propertyID)
 	if err != nil {
@@ -120,18 +122,19 @@ func (db *DBSQLite) Import(objectID string, properties map[string][]byte) (strin
 
 func (db *DBSQLite) Get(objectID string) (*Object, error) {
 	ctx := context.Background()
-	txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	/*txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, fmt.Errorf("unable to create transaction: %w", err)
 	}
-	defer txn.Rollback()
+	defer txn.Rollback() */
 
 	queryObjectStatement := `SELECT  property_id, data FROM object WHERE object_id = ?`
-	statement, err := txn.PrepareContext(ctx, queryObjectStatement)
+	statement, err := db.conn.PrepareContext(ctx, queryObjectStatement)
 	if err != nil {
 		log.Errorf("unable to prepare statement: %v", err)
 		return nil, fmt.Errorf("unable to prepare statement: %w", err)
 	}
+	defer statement.Close()
 
 	rows, err := statement.QueryContext(ctx, objectID)
 	if err != nil && err != sql.ErrNoRows {

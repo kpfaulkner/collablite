@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
 	"time"
 
@@ -52,7 +51,7 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 	var ok bool
 	if oc, ok = p.objectChannels[objectID]; !ok {
 		oc = &ObjectIDChannels{}
-		oc.inChannel = make(chan *proto.ObjectChange, 1000) // FIXME(kpfaulkner) configure 1000
+		oc.inChannel = make(chan *proto.ObjectChange, 00) // FIXME(kpfaulkner) configure 100000
 		oc.outChannels = make(map[string]chan *proto.ObjectConfirmation)
 		p.objectChannels[objectID] = oc
 
@@ -64,13 +63,13 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 
 		// already registered... BUT... will allow this to proceed and not return error.
 		// At worst, the client will get the entire document (which they should already have).
-		log.Warnf("RegisterClientWithObject called for objectID %s but already exists\n", objectID)
+		log.Warnf("ProcessObjectChanges for objectID %s but already exists\n", objectID)
 	}
 
 	var clientObjectChannel chan *proto.ObjectConfirmation
 	if clientObjectChannel, ok = oc.outChannels[clientID]; !ok {
 		// create an out channel specific for the client. This will be used to send results.
-		oc.outChannels[clientID] = make(chan *proto.ObjectConfirmation, 1000) // FIXME(kpfaulkner) configure 1000
+		oc.outChannels[clientID] = make(chan *proto.ObjectConfirmation, 100000) // FIXME(kpfaulkner) configure 100000
 		clientObjectChannel = oc.outChannels[clientID]
 	}
 
@@ -78,7 +77,7 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 	// FIXME(kpfaulkner) This is a problem. If the number of properties for this object is greater than the channel
 	// buffer size, then the channel will block, populateDocIntoClientChannel wont return...  and we're stuck in
 	// a deadlock with the defer NOT unlocking the lock. Need to fix this.
-	p.populateDocIntoClientChannel(objectID, clientObjectChannel)
+	//p.populateDocIntoClientChannel(objectID, clientObjectChannel)
 
 	return oc.inChannel, clientObjectChannel, nil
 }
@@ -122,12 +121,10 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 
 	for objChange := range inChan {
 
-		log.Debugf("no goroutines %d", runtime.NumGoroutine())
-
 		// do stuff.... then return result.
 		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
 		if err != nil {
-			log.Errorf("Unable to add to DB for objectID %s", objectID)
+			log.Errorf("Unable to add to DB for objectID %s : %+v", objectID, err)
 			return err
 		}
 		res := proto.ObjectConfirmation{}
@@ -146,9 +143,10 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 		// measured). Could have a flag to indicate IF the clients registered for this object have changed.
 		// IF there is a change, then we read from map, otherwise we used something we've cached.
 		// FIXME(kpfaulkner) major problem!
-		if chans, ok := p.objectChannels[objectID]; ok {
-			for chanNo, oc := range chans.outChannels {
-				fmt.Printf("ch %d : len %d\n", chanNo, len(oc))
+		chans, ok := p.objectChannels[objectID]
+		p.objectChannelLock.Unlock()
+		if ok {
+			for _, oc := range chans.outChannels {
 				select {
 				case oc <- &res:
 					// nothing...  body required
@@ -158,7 +156,7 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 				}
 			}
 		}
-		p.objectChannelLock.Unlock()
+
 	}
 	return nil
 }
@@ -176,15 +174,21 @@ func (p *Processor) populateDocIntoClientChannel(objectID string, clientObjectCh
 		return err
 	}
 
-	log.Debugf("POPULATING ENTIRE OBJECT %s\n", obj.ObjectID)
+	log.Debugf("POPULATING ENTIRE OBJECT %s : no props %d", obj.ObjectID, len(obj.Properties))
 
+	count := 0
 	for pName, pValue := range obj.Properties {
 		res := proto.ObjectConfirmation{}
 		res.ObjectId = objectID
 		res.PropertyId = pName
 		res.UniqueId = "" // empty unique id means the client should just accept the property. HACK
 		res.Data = pValue
+
+		count++
+		log.Debugf("prop %d", count)
 		clientObjectChannel <- &res
 	}
+	log.Debugf("FINISHED POPULATING ENTIRE OBJECT %s", obj.ObjectID)
+
 	return nil
 }

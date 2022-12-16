@@ -42,6 +42,7 @@ func NewCollabLiteServer(db storage.DB) *CollabLiteServer {
 //   - Send the change to be processed via channel.
 func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_ProcessObjectChangesServer) error {
 
+	count := 0
 	// clientID... need to figure out what to do here FIXME(kpfaulkner)
 	clientID := uuid.New().String()
 
@@ -61,8 +62,8 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 			cls.processor.UnregisterClientWithObject(clientID, currentObjectID)
 			return err
 		}
+		count++
 
-		log.Debugf("received object change %v", *objChange)
 		// if not currentObjectID then go get channels for this objectID
 		if objChange.ObjectId != currentObjectID {
 			inChan, outChan, err := cls.processor.RegisterClientWithObject(clientID, objChange.ObjectId)
@@ -79,8 +80,9 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 
 			// Goroutine is specific to this client. Read the outChan and send to client.
 			// Outchan is populated by ProcessObjectChanges
-			go func(outChan chan *proto.ObjectConfirmation) {
+			go func(outChan chan *proto.ObjectConfirmation, clientID string) {
 				log.Debugf("starting send goroutine for objectID %s", currentObjectID)
+				c := 0
 				for msg := range outChan {
 					if err := stream.Send(msg); err != nil {
 						log.Errorf("unable to send message to client: %v", err)
@@ -88,15 +90,22 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 						// In that reconnect process they'll get the entire document and be up to date.
 						return
 					}
+					c++
+					if c%100 == 0 {
+						log.Debugf("Sending client %s count %d", clientID, c)
+					}
 				}
-				log.Debugf("ending send goroutine for objectID %s", currentObjectID)
-			}(currentResultChannel)
+				log.Debugf("Sending send goroutine for objectID %s", currentObjectID)
+			}(currentResultChannel, clientID)
 		}
 
 		// send change to be stored and processed.
 		// Potential blocking point. FIXME(kpfaulkner) investigate
 		currentProcessChannel <- objChange
 
+		if count%100 == 0 {
+			log.Debugf("Received from client %s : count %d", clientID, count)
+		}
 	}
 
 	return nil
