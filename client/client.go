@@ -24,10 +24,16 @@ type Client struct {
 	stream proto.CollabLite_ProcessObjectChangesClient
 
 	// used to track local changes (yet to be confirmed by server)
-	unconfirmedLocalChanges map[string][]string
+	unconfirmedLocalChanges map[string]int
 
 	// and associated lock
 	unconfirmedLock sync.Mutex
+
+	// clientID used to help identify traffic from this client
+	clientID string
+
+	// number of conflicts, purely for stats collecting.
+	numConflicts int
 }
 
 func NewClient(serverAddr string) *Client {
@@ -45,7 +51,8 @@ func NewClient(serverAddr string) *Client {
 
 	// Make channel size configurable FIXME(kpfaulkner)
 	c := &Client{client: client,
-		unconfirmedLocalChanges: make(map[string][]string),
+		unconfirmedLocalChanges: make(map[string]int),
+		clientID:                uuid.New().String(),
 	}
 	return c
 }
@@ -61,21 +68,18 @@ func (c *Client) SendChange(outgoingChange *OutgoingChange) error {
 	//t := time.Now()
 
 	// convert to proto struct
-	objChange := convertOutgoingChangeToProto(outgoingChange)
+	objChange := convertOutgoingChangeToProto(outgoingChange, c.clientID)
 	// store change details for comparison with incoming confirmation
 	objectProperty := fmt.Sprintf("%s-%s", objChange.ObjectId, objChange.PropertyId)
 	c.unconfirmedLock.Lock()
-	if ids, ok := c.unconfirmedLocalChanges[objectProperty]; ok {
-		ids = append(ids, objChange.UniqueId)
-		c.unconfirmedLocalChanges[objectProperty] = ids
+	if _, ok := c.unconfirmedLocalChanges[objectProperty]; ok {
+		//ids = append(ids, objChange.UniqueId)
+		c.unconfirmedLocalChanges[objectProperty] = 1
 	} else {
-		c.unconfirmedLocalChanges[objectProperty] = []string{objChange.UniqueId}
+		c.unconfirmedLocalChanges[objectProperty] = c.unconfirmedLocalChanges[objectProperty] + 1
 	}
 	c.unconfirmedLock.Unlock()
 
-	if objectProperty == "graphical-0-0" {
-		log.Debugf("0x0!!!")
-	}
 	//tt := time.Now()
 	if err := c.stream.Send(objChange); err != nil {
 		// FIXME(kpfaulkner) shouldn't be fatal...
@@ -153,7 +157,7 @@ func (c *Client) RegisterToObject(ctx context.Context, objectID string) error {
 // will be passed to the callback registered via RegisterCallback
 func (c *Client) Listen(ctx context.Context) error {
 
-	var origUniqueIDs []string
+	//var origUniqueIDs []string
 	var hasLocalChange bool
 
 	count := 0
@@ -173,45 +177,60 @@ func (c *Client) Listen(ctx context.Context) error {
 		// way too much happening in this lock. FIXME(kpfaulkner)
 		c.unconfirmedLock.Lock()
 
-		if objectProperty == "graphical-0-0" {
-			log.Debugf("listen 0x0")
-		}
+		confirmedLocalChange := false
 
 		// If this change doesn't match any property change performed locally, then allow it through and
 		// call the callback
-		if origUniqueIDs, hasLocalChange = c.unconfirmedLocalChanges[objectProperty]; !hasLocalChange {
+		if _, hasLocalChange = c.unconfirmedLocalChanges[objectProperty]; !hasLocalChange {
 
 			//log.Debugf("not waiting on local confirmation %s", objectProperty)
 			// do not have a local change for this object/property combo, so allow this through.
 			c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
-		}
-
-		confirmedLocalChange := false
-		// If we've got here, then we know we have a local change for this object/property combo.
-		for i, origUniqueID := range origUniqueIDs {
-			// find the specific message.
-			if origUniqueID == objectConfirmation.UniqueId {
-
-				if objectProperty == "graphical-0-0" {
-					log.Debugf("listen 0x0")
+		} else {
+			// check if change is from this client. If so, modify unconfirmedLocalChanges
+			if objectConfirmation.UniqueId == c.clientID {
+				if c.unconfirmedLocalChanges[objectProperty] > 0 {
+					// does have local changes.. decrement count of changes.
+					c.unconfirmedLocalChanges[objectProperty]--
 				}
 
-				// remove from slice. Doing all this in a lock is stoooopid
-				c.unconfirmedLocalChanges[objectProperty] = append(origUniqueIDs[:i], origUniqueIDs[i+1:]...)
-				if len(c.unconfirmedLocalChanges[objectProperty]) == 0 {
+				// if no more left, then delete from map
+				if c.unconfirmedLocalChanges[objectProperty] == 0 {
 					delete(c.unconfirmedLocalChanges, objectProperty)
 				}
-
 				confirmedLocalChange = true
-				//log.Debugf("confirming local change %s", objectProperty)
-				// this is our change... pass it through.
 				c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
-				break
 			}
 		}
 
+		/*
+			confirmedLocalChange := false
+			// If we've got here, then we know we have a local change for this object/property combo.
+			for i, origUniqueID := range origUniqueIDs {
+				// find the specific message.
+				if origUniqueID == objectConfirmation.UniqueId {
+
+					if objectProperty == "graphical-0-0" {
+						log.Debugf("listen 0x0")
+					}
+
+					// remove from slice. Doing all this in a lock is stoooopid
+					c.unconfirmedLocalChanges[objectProperty] = append(origUniqueIDs[:i], origUniqueIDs[i+1:]...)
+					if len(c.unconfirmedLocalChanges[objectProperty]) == 0 {
+						delete(c.unconfirmedLocalChanges, objectProperty)
+					}
+
+					confirmedLocalChange = true
+					//log.Debugf("confirming local change %s", objectProperty)
+					// this is our change... pass it through.
+					//c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
+					break
+				}
+			} */
+
 		if hasLocalChange && !confirmedLocalChange {
 			log.Debugf("CONFLICT.. but dropping %s", objectProperty)
+			c.numConflicts++
 		}
 		// if we get here it means that we DO have a similar local change that has not been confirmed
 		// so it means that we drop this. Our unconfirmed local change is still yet to arrive which
@@ -222,26 +241,33 @@ func (c *Client) Listen(ctx context.Context) error {
 	return nil
 }
 
+// GetConflictsCount returns number of conflicts the client has recorded
+func (c *Client) GetConflictsCount() int {
+	return c.numConflicts
+}
+
+// GetChangeCount lists the number of unconfirmed changes for client
 func (c *Client) GetChangeCount() int {
 
 	c.unconfirmedLock.Lock()
 	count := 0
 	for _, v := range c.unconfirmedLocalChanges {
-		count += len(v)
+		count += v // FIXME int change
 	}
 	c.unconfirmedLock.Unlock()
 	return count
 }
 
 // convert models to proto structs
-func convertOutgoingChangeToProto(outgoingChange *OutgoingChange) *proto.ObjectChange {
+func convertOutgoingChangeToProto(outgoingChange *OutgoingChange, clientID string) *proto.ObjectChange {
 	return &proto.ObjectChange{
 		ObjectId:   outgoingChange.ObjectID,
 		PropertyId: outgoingChange.PropertyID,
 		Data:       outgoingChange.Data,
 
 		// add unique id to track local changes.
-		UniqueId: uuid.New().String(),
+		//UniqueId: fmt.Sprintf("%s-%s", clientID[:8], uuid.New().String()),
+		UniqueId: clientID,
 	}
 }
 
