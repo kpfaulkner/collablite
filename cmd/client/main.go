@@ -52,7 +52,7 @@ func main() {
 					log.Errorf("failed to send change: %v", err)
 					return
 				}
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(50 * time.Millisecond)
 			}
 		}()
 	}

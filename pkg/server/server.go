@@ -17,14 +17,33 @@ type CollabLiteServer struct {
 	db storage.DB
 
 	processor *Processor
+
+	// channel specifically for DB writing
+	// Will probably need to do something for sqlite multithreaded support, but
+	// will try this for now.
+	dbWriterChannel chan proto.ObjectChange
 }
 
 // NewCollabLiteServer create instance of CollabLiteServer with supplied DB client
 func NewCollabLiteServer(db storage.DB) *CollabLiteServer {
 	cls := CollabLiteServer{}
 	cls.db = db
-	cls.processor = NewProcessor(db)
+	cls.dbWriterChannel = make(chan proto.ObjectChange) // NOT A BUFFERED CHANNEL ON PURPOSE!
+	cls.processor = NewProcessor(db, cls.dbWriterChannel)
+
+	go cls.startDBWriter(cls.dbWriterChannel)
 	return &cls
+}
+
+// startDBWriter reads the change channel, writes to the DB.
+func (cls *CollabLiteServer) startDBWriter(changeCh chan proto.ObjectChange) error {
+	for change := range changeCh {
+		err := cls.db.Add(change.ObjectId, change.PropertyId, change.Data)
+		if err != nil {
+			log.Errorf("unable to add object %s : %s to db", change.ObjectId, change.PropertyId)
+		}
+	}
+	return nil
 }
 
 // ProcessObjectChanges main loop of processing object changes.

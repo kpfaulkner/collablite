@@ -29,14 +29,18 @@ type Processor struct {
 
 	// DB for storing objects
 	db storage.DB
+
+	// db writer channel, all processors will write the same channel.
+	dbWriterChannel chan proto.ObjectChange
 }
 
 // NewProcessor creates a new instance of Processor with the associated DB
 // There is a Processor per object being changed.
-func NewProcessor(db storage.DB) *Processor {
+func NewProcessor(db storage.DB, dbWriterChannel chan proto.ObjectChange) *Processor {
 	p := Processor{}
 	p.objectChannels = make(map[string]*ObjectIDChannels)
 	p.db = db
+	p.dbWriterChannel = dbWriterChannel
 	return &p
 }
 
@@ -114,12 +118,15 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 
 	for objChange := range inChan {
 
-		// do stuff.... then return result.
-		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
-		if err != nil {
-			log.Errorf("Unable to add to DB for objectID %s : %+v", objectID, err)
-			return err
-		}
+		/*
+			// do stuff.... then return result.
+			err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
+			if err != nil {
+				log.Errorf("Unable to add to DB for objectID %s : %+v", objectID, err)
+				return err
+			} */
+
+		p.dbWriterChannel <- *objChange
 		res := proto.ObjectConfirmation{}
 		res.ObjectId = objChange.ObjectId
 		res.PropertyId = objChange.PropertyId
