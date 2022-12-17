@@ -10,13 +10,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type ObjectIDChannelsx struct {
-	processChannel chan *proto.ObjectChange
-	resultChannel  chan *proto.ObjectConfirmation
-}
-
-var objectIDToChannels = make(map[string]ObjectIDChannels)
-
 // CollabLiteServer receives gRPC requests from clients and modifies the
 // object/data accordingly.
 type CollabLiteServer struct {
@@ -26,6 +19,7 @@ type CollabLiteServer struct {
 	processor *Processor
 }
 
+// NewCollabLiteServer create instance of CollabLiteServer with supplied DB client
 func NewCollabLiteServer(db storage.DB) *CollabLiteServer {
 	cls := CollabLiteServer{}
 	cls.db = db
@@ -42,8 +36,7 @@ func NewCollabLiteServer(db storage.DB) *CollabLiteServer {
 //   - Send the change to be processed via channel.
 func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_ProcessObjectChangesServer) error {
 
-	count := 0
-	// clientID... need to figure out what to do here FIXME(kpfaulkner)
+	incomingChangeCount := 0
 	clientID := uuid.New().String()
 
 	// current* are used to push/receive changes from RPC stream to code that will
@@ -55,23 +48,29 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 	for {
 		objChange, err := stream.Recv()
 		if err == io.EOF {
+			// Change this to attempt reconnect (if server crashed). TODO(kpfaulkner)
 			cls.processor.UnregisterClientWithObject(clientID, currentObjectID)
 			return nil
 		}
 		if err != nil {
+			// Change this to attempt reconnect (if server crashed). TODO(kpfaulkner)
 			cls.processor.UnregisterClientWithObject(clientID, currentObjectID)
 			return err
 		}
-		count++
+		incomingChangeCount++
 
 		// if not currentObjectID then go get channels for this objectID
 		if objChange.ObjectId != currentObjectID {
+
+			// Register this client against the ObjectID.
+			// RegisterClientWithObject also spins up a goroutine for processing changes associated with the object
+			// IF one does not already exist.
 			inChan, outChan, err := cls.processor.RegisterClientWithObject(clientID, objChange.ObjectId)
 			if err != nil {
 				return err
 			}
 
-			// unregister
+			// unregister the old client/object
 			cls.processor.UnregisterClientWithObject(clientID, currentObjectID)
 
 			currentObjectID = objChange.ObjectId
@@ -82,17 +81,10 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 			// Outchan is populated by ProcessObjectChanges
 			go func(outChan chan *proto.ObjectConfirmation, clientID string) {
 				log.Debugf("starting send goroutine for objectID %s", currentObjectID)
-				c := 0
 				for msg := range outChan {
 					if err := stream.Send(msg); err != nil {
 						log.Errorf("unable to send message to client: %v", err)
-						// If error then we cannot update the client. Will disconnect client and force them to reconnect.
-						// In that reconnect process they'll get the entire document and be up to date.
 						return
-					}
-					c++
-					if c%100 == 0 {
-						log.Debugf("Sending client %s count %d", clientID, c)
 					}
 				}
 				log.Debugf("Sending send goroutine for objectID %s", currentObjectID)
@@ -103,14 +95,16 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 		// Potential blocking point. FIXME(kpfaulkner) investigate
 		currentProcessChannel <- objChange
 
-		if count%100 == 0 {
-			log.Debugf("Received from client %s : count %d", clientID, count)
+		if incomingChangeCount%100 == 0 {
+			log.Debugf("Received from client %s : incomingChangeCount %d", clientID, incomingChangeCount)
 		}
 	}
 
 	return nil
 }
 
+// GetObject retrieves an entire object from the DB and returns it
+// via gRPC
 func (cls *CollabLiteServer) GetObject(ctx context.Context, req *proto.GetRequest) (*proto.GetResponse, error) {
 
 	obj, err := cls.db.Get(req.ObjectId)

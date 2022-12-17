@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
-
 	_ "modernc.org/sqlite"
 )
 
@@ -16,6 +15,7 @@ type DBSQLite struct {
 	ctx  context.Context
 }
 
+// NewDBSQLite creates new SQLite (modernc/sqlite) DB connection
 func NewDBSQLite(filename string) (*DBSQLite, error) {
 	dbs := DBSQLite{}
 	db, err := sql.Open("sqlite", filename)
@@ -41,7 +41,7 @@ func NewDBSQLite(filename string) (*DBSQLite, error) {
 // createTables creates the tables required for storing the objects.
 func createTables(ctx context.Context, conn *sql.Conn) error {
 
-	_, err := conn.ExecContext(ctx, `create table if not exists object (object_id varchar(50), property_id varchar(50), data BLOB, PRIMARY KEY (object_id, property_id))`)
+	_, err := conn.ExecContext(ctx, `create table if not exists object (object_id varchar(50), property_id varchar(100), data BLOB, PRIMARY KEY (object_id, property_id))`)
 	if err != nil {
 		log.Printf("unable to create changes table: %v", err)
 		return err
@@ -54,7 +54,10 @@ func createTables(ctx context.Context, conn *sql.Conn) error {
 // blow up due to transaction within transaction.
 // Need to investigate modernc/sqlite threadsafety. If I be naive and throw a lock around this
 // then I can see definite lag on test clients and everything gets out of sync.
-// FIXME(kpfaulkner)
+//
+// Will probably move all writing out to a separate goroutine and have the various processors just dump their
+// changes onto a bufferless channel. Goroutine does write, signals back to caller (via another channel?) that
+// write is done. Investigate... FIXME(kpfaulkner)
 func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
 
 	ctx := context.Background()
@@ -82,6 +85,7 @@ func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
 	return nil
 }
 
+// Delete objectID/propertyID from table.
 func (db *DBSQLite) Delete(objectID string, propertyID string) error {
 	ctx := context.Background()
 	txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: false})
@@ -96,6 +100,8 @@ func (db *DBSQLite) Delete(objectID string, propertyID string) error {
 	return nil
 }
 
+// Update an existing objectID/propertyID with new data.
+// Given Add has become an upsert, this function can probably go.
 func (db *DBSQLite) Update(objectID string, propertyID string, data []byte) error {
 	ctx := context.Background()
 	txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: false})
@@ -122,22 +128,16 @@ func (db *DBSQLite) Update(objectID string, propertyID string, data []byte) erro
 	return nil
 }
 
+// Import will take a map of property/data and store it as an object.
 func (db *DBSQLite) Import(objectID string, properties map[string][]byte) (string, error) {
+	panic("Not implemented")
 	return "", nil
 }
 
+// Get returns an object (id + property/data map)
 func (db *DBSQLite) Get(objectID string) (*Object, error) {
 
-	db.dbLock.Lock()
-	defer db.dbLock.Unlock()
-
 	ctx := context.Background()
-	/*txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return nil, fmt.Errorf("unable to create transaction: %w", err)
-	}
-	defer txn.Rollback() */
-
 	queryObjectStatement := `SELECT  property_id, data FROM object WHERE object_id = ?`
 	statement, err := db.conn.PrepareContext(ctx, queryObjectStatement)
 	if err != nil {
@@ -153,7 +153,6 @@ func (db *DBSQLite) Get(objectID string) (*Object, error) {
 
 	objectProperties := make(map[string][]byte)
 	for rows.Next() {
-
 		var propertyID string
 		var data []byte
 

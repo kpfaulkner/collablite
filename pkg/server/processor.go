@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -12,6 +11,8 @@ import (
 
 // ObjectIDChannels holds input channel (original objectChange) and slice of
 // output channels, one per client that is working on that object
+// Basically this ties incoming changes for an objectID and knows which channels to send
+// the results.
 type ObjectIDChannels struct {
 	inChannel chan *proto.ObjectChange
 
@@ -30,6 +31,8 @@ type Processor struct {
 	db storage.DB
 }
 
+// NewProcessor creates a new instance of Processor with the associated DB
+// There is a Processor per object being changed.
 func NewProcessor(db storage.DB) *Processor {
 	p := Processor{}
 	p.objectChannels = make(map[string]*ObjectIDChannels)
@@ -40,7 +43,7 @@ func NewProcessor(db storage.DB) *Processor {
 // RegisterClientWithObject registers a clientID and objectID with the processor.
 // This is used when an object is processed... it will contain a list of clients/channels
 // that need to get the results of the processing of a given object.
-// Will return inChan (specific for object) and results channel (specific for object AND clientid) to caller.
+// Will return inChan (specific for object) and results channel (specific for object+clientid combination) to caller.
 func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (chan *proto.ObjectChange, chan *proto.ObjectConfirmation, error) {
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
@@ -51,7 +54,7 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 	var ok bool
 	if oc, ok = p.objectChannels[objectID]; !ok {
 		oc = &ObjectIDChannels{}
-		oc.inChannel = make(chan *proto.ObjectChange, 00) // FIXME(kpfaulkner) configure 100000
+		oc.inChannel = make(chan *proto.ObjectChange, 100000) // FIXME(kpfaulkner) configure 100000
 		oc.outChannels = make(map[string]chan *proto.ObjectConfirmation)
 		p.objectChannels[objectID] = oc
 
@@ -82,6 +85,7 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 	return oc.inChannel, clientObjectChannel, nil
 }
 
+// UnregisterClientWithObject unregister the clientid/objectid against the server.
 func (p *Processor) UnregisterClientWithObject(clientID string, objectID string) error {
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
@@ -102,17 +106,6 @@ func (p *Processor) UnregisterClientWithObject(clientID string, objectID string)
 	}
 
 	return nil
-}
-
-func (p *Processor) getInChanForObjectID(objectID string) (chan *proto.ObjectChange, error) {
-	p.objectChannelLock.Lock()
-	defer p.objectChannelLock.Unlock()
-
-	if oc, ok := p.objectChannels[objectID]; ok {
-		return oc.inChannel, nil
-	}
-
-	return nil, fmt.Errorf("objectID not found")
 }
 
 // ProcessObjectChanges is purely for reading the incoming changes for a specific object
