@@ -14,7 +14,7 @@ import (
 )
 
 func processObjectConfirmation(obj *client.ChangeConfirmation) error {
-	log.Debugf("confirmation: %v", obj)
+	//log.Debugf("confirmation: %v", obj)
 	return nil
 }
 

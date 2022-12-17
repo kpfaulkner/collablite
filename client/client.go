@@ -229,7 +229,7 @@ func (c *Client) Listen(ctx context.Context) error {
 			} */
 
 		if hasLocalChange && !confirmedLocalChange {
-			log.Debugf("CONFLICT.. but dropping %s", objectProperty)
+			//log.Debugf("CONFLICT.. but dropping %s", objectProperty)
 			c.numConflicts++
 		}
 		// if we get here it means that we DO have a similar local change that has not been confirmed

@@ -50,7 +50,13 @@ func createTables(ctx context.Context, conn *sql.Conn) error {
 }
 
 // Add is really an upsert now. Might refactor update to be removed
+// Currently this is NOT thread safe...  so as soon as we're dealing with 2 different objects this will
+// blow up due to transaction within transaction.
+// Need to investigate modernc/sqlite threadsafety. If I be naive and throw a lock around this
+// then I can see definite lag on test clients and everything gets out of sync.
+// FIXME(kpfaulkner)
 func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
+
 	ctx := context.Background()
 	txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: false})
 	if err != nil {
@@ -121,6 +127,10 @@ func (db *DBSQLite) Import(objectID string, properties map[string][]byte) (strin
 }
 
 func (db *DBSQLite) Get(objectID string) (*Object, error) {
+
+	db.dbLock.Lock()
+	defer db.dbLock.Unlock()
+
 	ctx := context.Background()
 	/*txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
