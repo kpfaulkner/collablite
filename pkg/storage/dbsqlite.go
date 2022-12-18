@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	_ "modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // DBSQLite implements the DB interface using SQLite
@@ -17,6 +18,9 @@ type DBSQLite struct {
 
 // NewDBSQLite creates new SQLite (modernc/sqlite) DB connection
 func NewDBSQLite(filename string) (*DBSQLite, error) {
+
+	sqlite3.Xsqlite3_config(nil, sqlite3.SQLITE_CONFIG_SERIALIZED, 1)
+
 	dbs := DBSQLite{}
 	db, err := sql.Open("sqlite", filename)
 	if err != nil {

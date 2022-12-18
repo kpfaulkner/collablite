@@ -160,35 +160,3 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 	}
 	return nil
 }
-
-// populateDocIntoClientChannel populates an entire object into a channel.
-// This is used when clients are freshly registered for a document. Before they can make use of the updates
-// they need to know the current state of the document.
-// It is assumed ( FIXME(kpfaulkner) sort this out!) that the client is already registered with the objectID
-// and that a lock is already across the objectID from the caller. Bet this will bite me one day...
-func (p *Processor) populateDocIntoClientChannel(objectID string, clientObjectChannel chan *proto.ObjectConfirmation) error {
-	// read entire object here and push to clientObjectChannel? Doesn't feel like this is the right place to do this?
-	obj, err := p.db.Get(objectID)
-	if err != nil {
-		log.Errorf("unable to retrieve object %s during client registration", objectID)
-		return err
-	}
-
-	log.Debugf("POPULATING ENTIRE OBJECT %s : no props %d", obj.ObjectID, len(obj.Properties))
-
-	count := 0
-	for pName, pValue := range obj.Properties {
-		res := proto.ObjectConfirmation{}
-		res.ObjectId = objectID
-		res.PropertyId = pName
-		res.UniqueId = "" // empty unique id means the client should just accept the property. HACK
-		res.Data = pValue
-
-		count++
-		log.Debugf("prop %d", count)
-		clientObjectChannel <- &res
-	}
-	log.Debugf("FINISHED POPULATING ENTIRE OBJECT %s", obj.ObjectID)
-
-	return nil
-}

@@ -18,6 +18,7 @@ func main() {
 	fmt.Printf("So it begins...\n")
 	port := flag.Int("port", 50051, "The server port")
 	logLevel := flag.String("loglevel", "info", "Log Level: debug, info, warn, error")
+	store := flag.Bool("store", false, "store data to disk")
 	flag.Parse()
 
 	common.SetLogLevel(*logLevel)
@@ -31,9 +32,18 @@ func main() {
 	}
 	var opts []grpc.ServerOption
 
-	db, err := storage.NewDBSQLite("collablite.db")
-	if err != nil {
-		log.Fatalf("failed to create db: %v", err)
+	var db storage.DB
+
+	if *store {
+		db, err = storage.NewDBSQLite("collablite.db")
+		if err != nil {
+			log.Fatalf("failed to create db: %v", err)
+		}
+	} else {
+		db, err = storage.NewNullDB()
+		if err != nil {
+			log.Fatalf("failed to create nulldb: %v", err)
+		}
 	}
 
 	grpcServer := grpc.NewServer(opts...)
