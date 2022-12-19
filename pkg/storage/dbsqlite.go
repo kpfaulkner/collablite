@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/joncrlsn/dque"
+	"github.com/kpfaulkner/collablite/client"
 	log "github.com/sirupsen/logrus"
 	_ "modernc.org/sqlite"
 )
@@ -14,12 +16,25 @@ import (
 type DBSQLite struct {
 	conn *sql.Conn
 	ctx  context.Context
+
+	// queue to speed things up.
+	queue *dque.DQue
+}
+
+func itemBuilder() interface{} {
+	return &client.ChangeConfirmation{}
 }
 
 // NewDBSQLite creates new SQLite (modernc/sqlite) DB connection
 func NewDBSQLite(filename string) (*DBSQLite, error) {
 
 	//sqlite3.Xsqlite3_config(nil, sqlite3.SQLITE_CONFIG_SERIALIZED, 1)
+
+	// queue for potential speed up.
+	queue, err := dque.NewOrOpen("objectqueue", `.`, 100, itemBuilder)
+	if err != nil {
+		return nil, fmt.Errorf("new queue: %w", err)
+	}
 
 	dbs := DBSQLite{}
 	db, err := sql.Open("sqlite", filename)
@@ -35,10 +50,14 @@ func NewDBSQLite(filename string) (*DBSQLite, error) {
 
 	dbs.conn = conn
 	dbs.ctx = ctx
+	dbs.queue = queue
 
 	if err := createTables(ctx, conn); err != nil {
 		return nil, fmt.Errorf("unable to create table: %w", err)
 	}
+
+	// start queue processor
+	go dbs.queueProcessor()
 	return &dbs, nil
 }
 
@@ -53,6 +72,51 @@ func createTables(ctx context.Context, conn *sql.Conn) error {
 	return nil
 }
 
+// queueProcessor reads the persisted BQue and does the real sqlite add.
+// This works brilliantly and allows the clients to not be blocked on writing...
+// BUT... if a new client connects it will NOT have the latest state since
+// changes will be in the queue and not yet written to the DB.
+// FIXME(kpfaulkner) - need to think about this.
+func (db *DBSQLite) queueProcessor() {
+	var iface interface{}
+	var err error
+	for {
+		// want to block until something arrives.
+		if iface, err = db.queue.DequeueBlock(); err != nil {
+			log.Fatal("Error dequeuing item ", err)
+			return // FIXME(kpfaulkner)... return or start goroutine again.. or just continue?
+		}
+
+		msg, ok := iface.(*client.ChangeConfirmation)
+		if !ok {
+			log.Fatal("Dequeued object is not a ChangeConfirmation pointer")
+			continue // FIXME(kpfaulkner) check...
+		}
+
+		if err = db.add(msg.ObjectID, msg.PropertyID, msg.Data); err != nil {
+			log.Errorf("Unable to write to DB: %v", err)
+			continue
+		}
+	}
+}
+
+// Add will queue the changes onto a persisted queue and THEN they will be written to the DB
+// Purely an optimisation to try and speed things up.
+func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
+
+	msg := client.ChangeConfirmation{
+		ObjectID:   objectID,
+		PropertyID: propertyID,
+		Data:       data,
+	}
+	err := db.queue.Enqueue(&msg)
+	if err != nil {
+		return fmt.Errorf("unable to enqueue: %w", err)
+		return err
+	}
+	return nil
+}
+
 // Add is really an upsert now. Might refactor update to be removed
 // Currently this is NOT thread safe...  so as soon as we're dealing with 2 different objects this will
 // blow up due to transaction within transaction.
@@ -62,7 +126,7 @@ func createTables(ctx context.Context, conn *sql.Conn) error {
 // Will probably move all writing out to a separate goroutine and have the various processors just dump their
 // changes onto a bufferless channel. Goroutine does write, signals back to caller (via another channel?) that
 // write is done. Investigate... FIXME(kpfaulkner)
-func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
+func (db *DBSQLite) add(objectID string, propertyID string, data []byte) error {
 
 	//t := time.Now()
 	ctx := context.Background()
