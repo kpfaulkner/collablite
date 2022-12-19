@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/kpfaulkner/collablite/pkg/storage"
@@ -28,6 +29,8 @@ type CollabLiteServer struct {
 func NewCollabLiteServer(db storage.DB) *CollabLiteServer {
 	cls := CollabLiteServer{}
 	cls.db = db
+
+	// can make buffered and solve lots of perf issues... BUT...  means possible loss of data.
 	cls.dbWriterChannel = make(chan proto.ObjectChange) // NOT A BUFFERED CHANNEL ON PURPOSE!
 	cls.processor = NewProcessor(db, cls.dbWriterChannel)
 
@@ -56,6 +59,7 @@ func (cls *CollabLiteServer) startDBWriter(changeCh chan proto.ObjectChange) err
 func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_ProcessObjectChangesServer) error {
 
 	incomingChangeCount := 0
+	startTime := time.Now()
 	clientID := uuid.New().String()
 
 	// current* are used to push/receive changes from RPC stream to code that will
@@ -65,6 +69,7 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 	var currentProcessChannel chan *proto.ObjectChange
 
 	for {
+
 		objChange, err := stream.Recv()
 		if err == io.EOF {
 			// Change this to attempt reconnect (if server crashed). TODO(kpfaulkner)
@@ -114,8 +119,11 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 		// Potential blocking point. FIXME(kpfaulkner) investigate
 		currentProcessChannel <- objChange
 
-		if incomingChangeCount%100 == 0 {
-			log.Debugf("Received from client %s : incomingChangeCount %d", clientID, incomingChangeCount)
+		if time.Now().Sub(startTime) > time.Second {
+			rps := float64(incomingChangeCount) / time.Since(startTime).Seconds()
+			log.Debugf("Received from client %s : rps %0.2f", clientID, rps)
+			startTime = time.Now()
+			incomingChangeCount = 0
 		}
 	}
 

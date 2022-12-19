@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	_ "modernc.org/sqlite"
-	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // DBSQLite implements the DB interface using SQLite
@@ -19,7 +19,7 @@ type DBSQLite struct {
 // NewDBSQLite creates new SQLite (modernc/sqlite) DB connection
 func NewDBSQLite(filename string) (*DBSQLite, error) {
 
-	sqlite3.Xsqlite3_config(nil, sqlite3.SQLITE_CONFIG_SERIALIZED, 1)
+	//sqlite3.Xsqlite3_config(nil, sqlite3.SQLITE_CONFIG_SERIALIZED, 1)
 
 	dbs := DBSQLite{}
 	db, err := sql.Open("sqlite", filename)
@@ -64,6 +64,7 @@ func createTables(ctx context.Context, conn *sql.Conn) error {
 // write is done. Investigate... FIXME(kpfaulkner)
 func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
 
+	//t := time.Now()
 	ctx := context.Background()
 	txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: false})
 	if err != nil {
@@ -86,6 +87,7 @@ func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
 	}
 	txn.Commit()
 
+	//log.Debugf("Add took %d ms", time.Since(t).Milliseconds())
 	return nil
 }
 
@@ -107,6 +109,9 @@ func (db *DBSQLite) Delete(objectID string, propertyID string) error {
 // Update an existing objectID/propertyID with new data.
 // Given Add has become an upsert, this function can probably go.
 func (db *DBSQLite) Update(objectID string, propertyID string, data []byte) error {
+
+	t := time.Now()
+
 	ctx := context.Background()
 	txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: false})
 	if err != nil {
@@ -129,6 +134,9 @@ func (db *DBSQLite) Update(objectID string, propertyID string, data []byte) erro
 	}
 
 	txn.Commit()
+
+	log.Debugf("Update took %d ms", time.Since(t).Milliseconds())
+
 	return nil
 }
 
