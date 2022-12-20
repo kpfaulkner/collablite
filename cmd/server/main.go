@@ -35,7 +35,8 @@ func main() {
 	var db storage.DB
 
 	if *store {
-		db, err = storage.NewDBSQLite("collablite.db")
+		//db, err = storage.NewDBSQLite("collablite.db")
+		db, err = storage.NewBadgerDB("badgerdb")
 		if err != nil {
 			log.Fatalf("failed to create db: %v", err)
 		}

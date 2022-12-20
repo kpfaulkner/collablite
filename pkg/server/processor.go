@@ -117,18 +117,20 @@ func (p *Processor) UnregisterClientWithObject(clientID string, objectID string)
 func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.ObjectChange) error {
 
 	for objChange := range inChan {
-		/*
-			// do stuff.... then return result.
-			err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
-			if err != nil {
-				log.Errorf("Unable to add to DB for objectID %s : %+v", objectID, err)
-				return err
-			}
-		*/
+
+		//t := time.Now()
+		// do stuff.... then return result.
+		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
+		if err != nil {
+			log.Errorf("Unable to add to DB for objectID %s : %+v", objectID, err)
+			return err
+		}
+		//log.Debugf("Add took %d ms", time.Since(t).Milliseconds())
+
 		// temporarily remove channel writer... testing out multithreaded.
 
 		//t := time.Now()
-		p.dbWriterChannel <- *objChange
+		//p.dbWriterChannel <- *objChange
 		//log.Debugf("Time to write to channel %d ms", time.Since(t).Milliseconds())
 
 		res := proto.ObjectConfirmation{}
