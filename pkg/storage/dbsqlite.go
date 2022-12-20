@@ -19,6 +19,8 @@ type DBSQLite struct {
 
 	// queue to speed things up.
 	queue *dque.DQue
+
+	addStatement *sql.Stmt
 }
 
 func itemBuilder() interface{} {
@@ -56,6 +58,8 @@ func NewDBSQLite(filename string) (*DBSQLite, error) {
 		return nil, fmt.Errorf("unable to create table: %w", err)
 	}
 
+	dbs.prepareStatements()
+
 	// start queue processor
 	go dbs.queueProcessor()
 	return &dbs, nil
@@ -69,6 +73,18 @@ func createTables(ctx context.Context, conn *sql.Conn) error {
 		log.Printf("unable to create changes table: %v", err)
 		return err
 	}
+	return nil
+}
+
+func (db *DBSQLite) prepareStatements() error {
+	insertObjectStatement := `INSERT INTO object ( object_id, property_id,data) VALUES(?, ?, ?) ON CONFLICT(object_id, property_id) DO UPDATE SET data=?`
+	statement, err := db.conn.PrepareContext(db.ctx, insertObjectStatement)
+	if err != nil {
+		log.Errorf("unable to prepare statement: %v", err)
+		return fmt.Errorf("unable to prepare statement: %w", err)
+	}
+
+	db.addStatement = statement
 	return nil
 }
 
@@ -126,30 +142,41 @@ func (db *DBSQLite) Add(objectID string, propertyID string, data []byte) error {
 // Will probably move all writing out to a separate goroutine and have the various processors just dump their
 // changes onto a bufferless channel. Goroutine does write, signals back to caller (via another channel?) that
 // write is done. Investigate... FIXME(kpfaulkner)
+func (db *DBSQLite) addWithTx(objectID string, propertyID string, data []byte) error {
+
+	/*
+		//t := time.Now()
+		ctx := context.Background()
+		txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: false})
+		if err != nil {
+			return fmt.Errorf("unable to create transaction: %w", err)
+		}
+
+		defer txn.Rollback()
+
+		_, err = statement.Exec(objectID, propertyID, data, data)
+		if err != nil {
+			log.Errorf("unable to insert object %v", err)
+			return fmt.Errorf("unable to insert object: %w", err)
+		}
+		txn.Commit()
+	*/
+	//log.Debugf("Add took %d ms", time.Since(t).Milliseconds())
+	return nil
+}
+
 func (db *DBSQLite) add(objectID string, propertyID string, data []byte) error {
 
 	//t := time.Now()
-	ctx := context.Background()
-	txn, err := db.conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: false})
-	if err != nil {
-		return fmt.Errorf("unable to create transaction: %w", err)
-	}
 
-	defer txn.Rollback()
-	insertObjectStatement := `INSERT INTO object ( object_id, property_id,data) VALUES(?, ?, ?) ON CONFLICT(object_id, property_id) DO UPDATE SET data=?`
-	statement, err := txn.PrepareContext(ctx, insertObjectStatement)
-	if err != nil {
-		log.Errorf("unable to prepare statement: %v", err)
-		return fmt.Errorf("unable to prepare statement: %w", err)
-	}
-	defer statement.Close()
-
-	_, err = statement.Exec(objectID, propertyID, data, data)
+	db.conn.ExecContext(db.ctx, "BEGIN")
+	defer db.conn.ExecContext(db.ctx, "COMMIT")
+	_, err := db.addStatement.Exec(objectID, propertyID, data, data)
 	if err != nil {
 		log.Errorf("unable to insert object %v", err)
+		db.conn.ExecContext(db.ctx, "ROLLBACK")
 		return fmt.Errorf("unable to insert object: %w", err)
 	}
-	txn.Commit()
 
 	//log.Debugf("Add took %d ms", time.Since(t).Milliseconds())
 	return nil
