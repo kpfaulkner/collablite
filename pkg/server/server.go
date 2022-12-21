@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"io"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/kpfaulkner/collablite/pkg/storage"
@@ -59,7 +58,6 @@ func (cls *CollabLiteServer) startDBWriter(changeCh chan proto.ObjectChange) err
 func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_ProcessObjectChangesServer) error {
 
 	incomingChangeCount := 0
-	startTime := time.Now()
 	clientID := uuid.New().String()
 
 	// current* are used to push/receive changes from RPC stream to code that will
@@ -118,13 +116,6 @@ func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_Proces
 		// send change to be stored and processed.
 		// Potential blocking point. FIXME(kpfaulkner) investigate
 		currentProcessChannel <- objChange
-
-		if time.Now().Sub(startTime) > time.Second {
-			rps := float64(incomingChangeCount) / time.Since(startTime).Seconds()
-			log.Debugf("Received from client %s : rps %0.2f", clientID, rps)
-			startTime = time.Now()
-			incomingChangeCount = 0
-		}
 	}
 
 	return nil

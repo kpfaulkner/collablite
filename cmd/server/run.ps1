@@ -1,4 +1,5 @@
+go build .
 while ($true) 
 {
-  go run . -loglevel debug
+  start-process -filepath .\server.exe -argumentlist "-loglevel debug -store" -wait -nonewwindow
 }
