@@ -52,7 +52,7 @@ func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
 
-	log.Debugf("Registering client %s against object %s", clientID, objectID)
+	//log.Debugf("Registering client %s against object %s", clientID, objectID)
 
 	var oc *ObjectIDChannels
 	var ok bool
@@ -94,7 +94,7 @@ func (p *Processor) UnregisterClientWithObject(clientID string, objectID string)
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
 
-	log.Debugf("Unregistering client %s against object %s", clientID, objectID)
+	//log.Debugf("Unregistering client %s against object %s", clientID, objectID)
 
 	if oc, ok := p.objectChannels[objectID]; ok {
 		if clientOutChan, ok := oc.outChannels[clientID]; ok {
@@ -116,9 +116,10 @@ func (p *Processor) UnregisterClientWithObject(clientID string, objectID string)
 // writing it to storage and then sending the results to all clients that are listening
 func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.ObjectChange) error {
 
+	t := time.Now()
+	count := 0
 	for objChange := range inChan {
-
-		//t := time.Now()
+		count++
 		// do stuff.... then return result.
 		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
 		if err != nil {
@@ -156,13 +157,18 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 				select {
 				case oc <- &res:
 					// nothing...  body required
-				case <-time.After(10 * time.Millisecond):
+				case <-time.After(5 * time.Millisecond):
 					// if we cannot send the data to the client for some reason... just drop the message?
 					log.Warnf("Unable to send to client. Channel full? Dropping message")
 				}
 			}
 		}
 
+		if time.Now().Sub(t).Seconds() > 1 {
+			log.Debugf("ObjectID %s : rps %d", objectID, count)
+			t = time.Now()
+			count = 0
+		}
 	}
 	return nil
 }
