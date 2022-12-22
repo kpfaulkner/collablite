@@ -19,3 +19,14 @@ type ChangeConfirmation struct {
 	PropertyID string
 	Data       []byte
 }
+
+// Object is a simple object used to represent an object in the system.
+type Object struct {
+	ObjectID   string
+	Properties map[string][]byte
+
+	// This may or may not stay. This is just to help the client know what type of
+	// object this is representing. eg Could be set to "json" so they know they can
+	// change to JSON later, or anything else. This is purely a helper field.
+	ObjectType string
+}

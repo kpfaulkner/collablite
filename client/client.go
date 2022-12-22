@@ -65,30 +65,23 @@ func (c *Client) RegisterCallback(cb func(*ChangeConfirmation) error) error {
 
 // SendChange sends the change to the server for processing
 func (c *Client) SendChange(outgoingChange *OutgoingChange) error {
-	//t := time.Now()
-
 	// convert to proto struct
 	objChange := convertOutgoingChangeToProto(outgoingChange, c.clientID)
+
 	// store change details for comparison with incoming confirmation
 	objectProperty := fmt.Sprintf("%s-%s", objChange.ObjectId, objChange.PropertyId)
 	c.unconfirmedLock.Lock()
 	if _, ok := c.unconfirmedLocalChanges[objectProperty]; ok {
-		//ids = append(ids, objChange.UniqueId)
 		c.unconfirmedLocalChanges[objectProperty] = 1
 	} else {
 		c.unconfirmedLocalChanges[objectProperty] = c.unconfirmedLocalChanges[objectProperty] + 1
 	}
 	c.unconfirmedLock.Unlock()
 
-	//tt := time.Now()
 	if err := c.stream.Send(objChange); err != nil {
-		// FIXME(kpfaulkner) shouldn't be fatal...
 		log.Errorf("%v.Send(%v) = %v", c.stream, objChange, err)
 		return err
 	}
-	//log.Debugf("stream send took %d ms", time.Since(tt).Milliseconds())
-
-	//log.Debugf("send took: %v", time.Since(t).Milliseconds())
 
 	return nil
 }
@@ -182,14 +175,13 @@ func (c *Client) Listen(ctx context.Context) error {
 		// If this change doesn't match any property change performed locally, then allow it through and
 		// call the callback
 		if _, hasLocalChange = c.unconfirmedLocalChanges[objectProperty]; !hasLocalChange {
-
-			//log.Debugf("not waiting on local confirmation %s", objectProperty)
 			// do not have a local change for this object/property combo, so allow this through.
 			c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
 		} else {
 			// check if change is from this client. If so, modify unconfirmedLocalChanges
 			if objectConfirmation.UniqueId == c.clientID {
 				if c.unconfirmedLocalChanges[objectProperty] > 0 {
+
 					// does have local changes.. decrement count of changes.
 					c.unconfirmedLocalChanges[objectProperty]--
 				}
@@ -203,33 +195,7 @@ func (c *Client) Listen(ctx context.Context) error {
 			}
 		}
 
-		/*
-			confirmedLocalChange := false
-			// If we've got here, then we know we have a local change for this object/property combo.
-			for i, origUniqueID := range origUniqueIDs {
-				// find the specific message.
-				if origUniqueID == objectConfirmation.UniqueId {
-
-					if objectProperty == "graphical-0-0" {
-						log.Debugf("listen 0x0")
-					}
-
-					// remove from slice. Doing all this in a lock is stoooopid
-					c.unconfirmedLocalChanges[objectProperty] = append(origUniqueIDs[:i], origUniqueIDs[i+1:]...)
-					if len(c.unconfirmedLocalChanges[objectProperty]) == 0 {
-						delete(c.unconfirmedLocalChanges, objectProperty)
-					}
-
-					confirmedLocalChange = true
-					//log.Debugf("confirming local change %s", objectProperty)
-					// this is our change... pass it through.
-					//c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
-					break
-				}
-			} */
-
 		if hasLocalChange && !confirmedLocalChange {
-			//log.Debugf("CONFLICT.. but dropping %s", objectProperty)
 			c.numConflicts++
 		}
 		// if we get here it means that we DO have a similar local change that has not been confirmed
