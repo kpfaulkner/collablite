@@ -9,6 +9,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// PebbleIterator... used for mocking in tests
+// Is this a mistake?
+type PebbleIterator interface {
+	First() bool
+	Valid() bool
+	Next() bool
+	Key() []byte
+	ValueAndErr() ([]byte, error)
+}
+
 // PebbleMinimal is the minimal interface we use from Pebble
 // Interface to help mock this out for testing.
 type PebbleMinimal interface {
