@@ -3,7 +3,7 @@ module github.com/kpfaulkner/collablite
 go 1.19
 
 require (
-	github.com/cockroachdb/pebble v0.0.0-20221220185552-f07c5e5f061b
+	github.com/cockroachdb/pebble v0.0.0-20221222183300-eb5e1039627d
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/google/uuid v1.3.0
 	github.com/sirupsen/logrus v1.9.0

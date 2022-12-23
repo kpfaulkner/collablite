@@ -30,3 +30,12 @@ type Object struct {
 	// change to JSON later, or anything else. This is purely a helper field.
 	ObjectType string
 }
+
+func NewObject(objectID string, objectType string) *Object {
+	o := &Object{
+		ObjectID:   objectID,
+		ObjectType: objectType,
+		Properties: make(map[string][]byte),
+	}
+	return o
+}

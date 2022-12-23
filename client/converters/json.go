@@ -38,21 +38,26 @@ func ObjectToJson(object client.Object) (string, error) {
 func JsonToObject(objectID string, j string) (*client.Object, error) {
 	res := gjson.Parse(j)
 
-	allKeys := make(map[string]any)
-	res.ForEach(func(key, value gjson.Result) bool {
-		fmt.Println("key", key, "value", value)
-		keys := processKey(key.String(), value, j)
-		for k, v := range keys {
-			allKeys[k] = v
-		}
-		return true
-	})
+	allProperties := processKey("", res)
 
-	obj := client.Object{}
-	obj.ObjectType = "JSON"
-	obj.ObjectID = objectID
-	for k, v := range allKeys {
-		bytes, err := json.Marshal(v)
+	obj := client.NewObject(objectID, "JSON")
+	var a any
+	for k, v := range allProperties {
+
+		switch v.Type {
+		case gjson.String:
+			a = v.String()
+		case gjson.Number:
+			a = v.Num
+		case gjson.True:
+			a = true
+		case gjson.False:
+			a = false
+		default:
+			panic("NO IDEA")
+		}
+
+		bytes, err := json.Marshal(a)
 		if err != nil {
 			log.Errorf("Error marshalling JSON: %v", err)
 			return nil, err
@@ -60,36 +65,30 @@ func JsonToObject(objectID string, j string) (*client.Object, error) {
 		obj.Properties[k] = bytes
 	}
 
-	return nil, errors.New("Not JSON")
+	return obj, nil
 }
 
-func processKey(key string, parsedJson gjson.Result, origJson string) map[string]any {
-
-	allKeys := make(map[string]any)
+func processKey(keyPrefix string, parsedJson gjson.Result) map[string]gjson.Result {
+	allKeys := make(map[string]gjson.Result)
 	parsedJson.ForEach(func(k, v gjson.Result) bool {
-
 		var newKey string
-		if k.String() == "" {
 
-			switch v.Type {
-			case gjson.String:
-				allKeys[key] = v.Str
-			case gjson.Number:
-				allKeys[key] = v.Num
-			case gjson.JSON:
-				// dont want to do anything... we'll just keep looping
-			default:
-				panic("NO IDEA")
+		if keyPrefix != "" {
+			newKey = fmt.Sprintf("%s.%s", keyPrefix, k.String())
+		} else {
+			newKey = k.String()
+		}
+
+		if v.Type == gjson.JSON {
+			res := gjson.Parse(v.Raw)
+			m := processKey(newKey, res)
+			for kk, vv := range m {
+				allKeys[kk] = vv
 			}
-
 			return true
 		} else {
-			newKey = fmt.Sprintf("%s.%s", key, k)
-		}
-		res := gjson.Get(origJson, newKey)
-		keys := processKey(newKey, res, origJson)
-		for k, v := range keys {
-			allKeys[k] = v
+			allKeys[newKey] = v
+			return true
 		}
 		return true
 	})
