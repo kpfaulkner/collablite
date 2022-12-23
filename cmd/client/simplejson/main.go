@@ -74,7 +74,6 @@ func processObjectConfirmation(change *client.ChangeConfirmation) error {
 			log.Errorf("error converting object to json: %v", err)
 			return err
 		}
-		fmt.Printf("OBJ as JSON %s\n", j)
 	}
 	return nil
 }

@@ -40,7 +40,11 @@ func main() {
 	if *store {
 		//db, err = storage.NewDBSQLite("collablite.db")
 		//db, err = storage.NewBadgerDB("badgerdb")
-		db, err = storage.NewPebbleDB("pebbledb")
+		pebbleClient, err := storage.NewPebbleClient("pebbledb")
+		if err != nil {
+			log.Fatalf("unable to create pebble client: %v", err)
+		}
+		db, err = storage.NewPebbleDB(pebbleClient)
 		if err != nil {
 			log.Fatalf("failed to create db: %v", err)
 		}

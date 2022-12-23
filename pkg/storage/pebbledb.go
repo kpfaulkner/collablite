@@ -9,21 +9,32 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// PebbleMinimal is the minimal interface we use from Pebble
+// Interface to help mock this out for testing.
+type PebbleMinimal interface {
+	Set(key, value []byte, opts *pebble.WriteOptions) error
+	NewIter(o *pebble.IterOptions) *pebble.Iterator
+}
+
 // BadgerDB implements the DB interface using BadgerDB
 type PebbleDB struct {
-	pdb *pebble.DB
+	pdb PebbleMinimal
 	ctx context.Context
 }
 
-// NewPebbleDB creates new BadgerDB DB connection
-func NewPebbleDB(dir string) (*PebbleDB, error) {
-	dbs := PebbleDB{}
+func NewPebbleClient(dir string) (*pebble.DB, error) {
 	db, err := pebble.Open(dir, &pebble.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	dbs.pdb = db
+	return db, nil
+}
+
+// NewPebbleDB creates new BadgerDB DB connection
+func NewPebbleDB(pdb PebbleMinimal) (*PebbleDB, error) {
+	dbs := PebbleDB{}
+	dbs.pdb = pdb
 	dbs.ctx = context.Background()
 	return &dbs, nil
 }
