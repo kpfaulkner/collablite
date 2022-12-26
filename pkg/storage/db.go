@@ -11,6 +11,14 @@ type Object struct {
 	Properties map[string][]byte
 }
 
+func NewObject(objectID string) *Object {
+	o := &Object{
+		ObjectID:   objectID,
+		Properties: make(map[string][]byte),
+	}
+	return o
+}
+
 // DB interface used to store the data *somewhere*
 type DB interface {
 

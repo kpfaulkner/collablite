@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -107,6 +108,8 @@ func (p *Processor) UnregisterClientWithObject(clientID string, objectID string)
 			close(oc.inChannel)
 			delete(p.objectChannels, objectID)
 		}
+	} else {
+		return errors.New("attempting to unregister clientID/objectID but not registered")
 	}
 
 	return nil
@@ -119,20 +122,13 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 	t := time.Now()
 	count := 0
 	for objChange := range inChan {
-		count++
+
 		// do stuff.... then return result.
 		err := p.db.Add(objChange.ObjectId, objChange.PropertyId, objChange.Data)
 		if err != nil {
 			log.Errorf("Unable to add to DB for objectID %s : %+v", objectID, err)
 			return err
 		}
-		//log.Debugf("Add took %d ms", time.Since(t).Milliseconds())
-
-		// temporarily remove channel writer... testing out multithreaded.
-
-		//t := time.Now()
-		//p.dbWriterChannel <- *objChange
-		//log.Debugf("Time to write to channel %d ms", time.Since(t).Milliseconds())
 
 		res := proto.ObjectConfirmation{}
 		res.ObjectId = objChange.ObjectId
@@ -164,6 +160,8 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 			}
 		}
 
+		// generate RPS stats
+		count++
 		if time.Now().Sub(t).Seconds() > 1 {
 			log.Debugf("ObjectID %s : rps %d", objectID, count)
 			t = time.Now()

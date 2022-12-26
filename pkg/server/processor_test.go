@@ -2,6 +2,7 @@ package server
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kpfaulkner/collablite/pkg/storage"
 	"github.com/kpfaulkner/collablite/proto"
@@ -90,4 +91,62 @@ func TestRegisterClientWithObjectMultipleForSameObjectSameClient(t *testing.T) {
 
 	// confirmation channels should be the same
 	assert.Equal(t, confirmationChannel, confirmationChannel2, "Confirmation channels should be the same channel")
+}
+
+func TestUnregisterClientWithObjectSingle(t *testing.T) {
+
+	// dummy DB... does nothing
+	nullDB, _ := storage.NewNullDB()
+	ch := make(chan proto.ObjectChange)
+	processor := NewProcessor(nullDB, ch)
+
+	changeChannel, confirmationChannel, err := processor.RegisterClientWithObject("client1", "object1")
+	assert.Nil(t, err, "Should not have error when registering")
+	assert.NotNil(t, changeChannel, "Should have change channel")
+	assert.NotNil(t, confirmationChannel, "Should have confirmation channel")
+
+	err = processor.UnregisterClientWithObject("client1", "object1")
+	assert.Nil(t, err, "Should not have error when registering")
+
+}
+
+func TestUnregisterClientWithObjectButNotRegistered(t *testing.T) {
+
+	// dummy DB... does nothing
+	nullDB, _ := storage.NewNullDB()
+	ch := make(chan proto.ObjectChange)
+	processor := NewProcessor(nullDB, ch)
+
+	err := processor.UnregisterClientWithObject("client1", "object1")
+	assert.NotNil(t, err, "Should throw error if not registered")
+
+}
+
+func TestProcessObjectChanges(t *testing.T) {
+	db, _ := NewFakeDB()
+	ch := make(chan proto.ObjectChange)
+	processor := NewProcessor(db, ch)
+
+	changeChannel, confirmationChannel, err := processor.RegisterClientWithObject("client1", "object1")
+	assert.Nil(t, err, "Should not have error when registering")
+	assert.NotNil(t, changeChannel, "Should have change channel")
+	assert.NotNil(t, confirmationChannel, "Should have confirmation channel")
+	assert.EqualValues(t, 0, len(confirmationChannel), "Should have no confirmation messages")
+
+	testChange := proto.ObjectChange{
+		ObjectId:   "object1",
+		PropertyId: "prop1",
+		Data:       []byte("prop1value"),
+	}
+	changeChannel <- &testChange
+
+	//err = processor.ProcessObjectChanges("object1", changeChannel)
+	//assert.Nil(t, err, "Should not have error when sending object changes")
+	//assert.EqualValues(t, 1, len(confirmationChannel), "Should have one confirmation message")
+
+	time.Sleep(2 * time.Second) // hack.. timing sucketh.
+
+	obj, err := db.Get("object1")
+	assert.Nil(t, err, "Should not have error when getting object")
+	assert.EqualValues(t, "prop1value", string(obj.Properties["prop1"]), "Should have correct property value")
 }
