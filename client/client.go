@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -18,7 +19,13 @@ type Client struct {
 	client proto.CollabLiteClient
 
 	// is called when we receive a confirmation from the server.
-	objectConfirmationCallback func(*ChangeConfirmation) error
+	objectConfirmationCallback func(any) error
+
+	// function used to convert from client structure to our internal Object type
+	convertToObject func(objectID string, exitingObject *Object, clientObject any) (*Object, error)
+
+	// function used to convert from out internal Object type to the clients structure
+	convertFromObject func(object *Object) (string, any, error)
 
 	// stream to gRPC server
 	stream proto.CollabLite_ProcessObjectChangesClient
@@ -34,6 +41,9 @@ type Client struct {
 
 	// number of conflicts, purely for stats collecting.
 	numConflicts int
+
+	// Object the client is dealing with..
+	object *Object
 }
 
 func NewClient(serverAddr string) *Client {
@@ -57,14 +67,56 @@ func NewClient(serverAddr string) *Client {
 	return c
 }
 
+func (c *Client) RegisterConverters(convertFromObject func(object *Object) (string, any, error),
+	convertToObject func(objectID string, exitingObject *Object, clientObject any) (*Object, error)) error {
+	c.convertFromObject = convertFromObject
+	c.convertToObject = convertToObject
+	return nil
+}
+
 // RegisterCallback is called whenever a change for the object being watched is received.
-func (c *Client) RegisterCallback(cb func(*ChangeConfirmation) error) error {
+func (c *Client) RegisterCallback(cb func(any) error) error {
 	c.objectConfirmationCallback = cb
 	return nil
 }
 
+// SendObject takes the users object, converts to what the server expects and sends it.
+// Steps:
+//   - Update our internal object (c.object) with the new clientObject. This may just be updating a single property
+//     Or populating the entire object.
+//   - Loop through the dirty properties in the internal object and send to server.
+func (c *Client) SendObject(objectID string, clientObject any) error {
+	var err error
+	c.object, err = c.convertToObject(objectID, c.object, clientObject)
+	if err != nil {
+		log.Errorf("failed to convert object: %v", err)
+		return err
+	}
+
+	for k, v := range c.object.Properties {
+		if v.Dirty {
+			outgoingChange := &OutgoingChange{
+				ObjectID:   objectID,
+				PropertyID: k,
+				Data:       v.Data,
+			}
+			err := c.sendChange(outgoingChange)
+			if err != nil {
+				log.Errorf("failed to send change: %v", err)
+				return err
+			}
+
+			// no longer dirty.
+			v.Dirty = false
+			c.object.Properties[k] = v
+		}
+	}
+
+	return nil
+}
+
 // SendChange sends the change to the server for processing
-func (c *Client) SendChange(outgoingChange *OutgoingChange) error {
+func (c *Client) sendChange(outgoingChange *OutgoingChange) error {
 	// convert to proto struct
 	objChange := convertOutgoingChangeToProto(outgoingChange, c.clientID)
 
@@ -126,18 +178,23 @@ func (c *Client) GetObject(objectID string) ([]ChangeConfirmation, error) {
 }
 
 // RegisterToObject sends a message to the server indicating that the client is listening for changes
-// for a particular ObjectID. This only needs to be done once and only if we're passively listening and
-// NOT sending data ourselves. If we're sending data we do not need to perform this.
+// for a particular ObjectID. This only needs to be done when the client is switching between objects.
 func (c *Client) RegisterToObject(ctx context.Context, objectID string) error {
 
 	// even if not sending changes... send an empty one to indicate what we want to listen to.
 	req := OutgoingChange{
 		ObjectID:   objectID,
-		PropertyID: "",
+		PropertyID: "", // empty property used to register interest of object with server.
 		Data:       nil,
 	}
 
-	if err := c.SendChange(&req); err != nil {
+	// brand new internal object.
+	c.object = &Object{
+		ObjectID:   objectID,
+		Properties: make(map[string]Property),
+	}
+
+	if err := c.sendChange(&req); err != nil {
 		log.Errorf("failed to send change: %v", err)
 		return err
 	}
@@ -176,7 +233,11 @@ func (c *Client) Listen(ctx context.Context) error {
 		// call the callback
 		if _, hasLocalChange = c.unconfirmedLocalChanges[objectProperty]; !hasLocalChange {
 			// do not have a local change for this object/property combo, so allow this through.
-			c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
+
+			err := c.convertAndExecuteCallback(objectConfirmation)
+			if err != nil {
+				return err
+			}
 		} else {
 			// check if change is from this client. If so, modify unconfirmedLocalChanges
 			if objectConfirmation.UniqueId == c.clientID {
@@ -191,7 +252,10 @@ func (c *Client) Listen(ctx context.Context) error {
 					delete(c.unconfirmedLocalChanges, objectProperty)
 				}
 				confirmedLocalChange = true
-				c.objectConfirmationCallback(convertProtoToChangeConfirmation(objectConfirmation))
+				err := c.convertAndExecuteCallback(objectConfirmation)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -204,6 +268,35 @@ func (c *Client) Listen(ctx context.Context) error {
 		c.unconfirmedLock.Unlock()
 	}
 
+	return nil
+}
+
+func (c *Client) convertAndExecuteCallback(objectConfirmation *proto.ObjectConfirmation) error {
+	confirmation := convertProtoToChangeConfirmation(objectConfirmation)
+
+	if objectConfirmation.ObjectId != c.object.ObjectID {
+		log.Errorf("incorrect object ID returned. Expected %s, got %s", c.object.ObjectID, objectConfirmation.ObjectId)
+		return errors.New("incorrect object ID returned")
+	}
+
+	if confirmation.PropertyID != "" {
+
+		// indicate its been updated from the server.
+		c.object.Properties[confirmation.PropertyID] = Property{Data: confirmation.Data, Dirty: false, Updated: true}
+
+		_, _, err := c.convertFromObject(c.object)
+		if err != nil {
+			log.Errorf("unable to convert incoming change to object: %v", err)
+			return err
+		}
+
+		/*   do we actually need this?
+		err = c.objectConfirmationCallback(object)
+		if err != nil {
+			log.Errorf("error while calling client callback function: %v", err)
+			return err
+		} */
+	}
 	return nil
 }
 

@@ -1,4 +1,4 @@
-package converters
+package json
 
 import (
 	"encoding/json"
@@ -15,32 +15,40 @@ import (
 // Currently it is really up to the caller to know if they're really dealing with JSON
 // or not. If this is called and the object is not JSON, there is no guarantee what will result.
 // The object has a "hint" of the type, but this is not enforced.
-func ObjectToJson(object client.Object) (string, error) {
+func ConvertFromObject(object client.Object) (string, any, error) {
 
 	if object.ObjectType == "JSON" {
 
 		var newJson string
 		for k, v := range object.Properties {
 			var a any
-			err := json.Unmarshal(v, &a)
+			err := json.Unmarshal(v.Data, &a)
 			if err != nil {
 				log.Errorf("Error unmarshalling JSON: %v", err)
-				return "", err
+				return "", "", err
 			}
 			newJson, _ = sjson.Set(newJson, k, a)
 		}
-		return newJson, nil
+		return newJson, object.ObjectID, nil
 	}
 
-	return "", errors.New("Not JSON")
+	return "", "", errors.New("Not JSON")
 }
 
-func JsonToObject(objectID string, j string) (*client.Object, error) {
-	res := gjson.Parse(j)
+func ConvertToObject(objectID string, existingObject *client.Object, clientObject any) (*client.Object, error) {
+
+	clientJson := clientObject.(string)
+	res := gjson.Parse(clientJson)
 
 	allProperties := processKey("", res)
 
-	obj := client.NewObject(objectID, "JSON")
+	var obj *client.Object
+	if existingObject == nil {
+		obj = client.NewObject(objectID, "JSON")
+	} else {
+		obj = existingObject
+	}
+
 	var a any
 	for k, v := range allProperties {
 
@@ -62,7 +70,7 @@ func JsonToObject(objectID string, j string) (*client.Object, error) {
 			log.Errorf("Error marshalling JSON: %v", err)
 			return nil, err
 		}
-		obj.Properties[k] = bytes
+		obj.AdjustProperty(k, bytes)
 	}
 
 	return obj, nil
