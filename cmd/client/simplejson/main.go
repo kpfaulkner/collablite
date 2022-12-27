@@ -61,7 +61,7 @@ const (
 						}`
 )
 
-var obj *client.Object
+var obj *client.InternalObject
 
 func processObjectConfirmation(change *client.ChangeConfirmation) error {
 	log.Debugf("confirmation: %v", change)
@@ -132,7 +132,7 @@ func main() {
 
 // does some random changes against the existing JSON
 // This is VERY specific to our existing JSON format obviously
-func generateRandomChange(obj *client.Object) (*client.OutgoingChange, error) {
+func generateRandomChange(obj *client.InternalObject) (*client.OutgoingChange, error) {
 
 	var property string
 	var data []byte

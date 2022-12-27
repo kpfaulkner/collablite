@@ -18,11 +18,11 @@ import (
 type Client struct {
 	client proto.CollabLiteClient
 
-	// function used to convert from client structure to our internal Object type
-	convertToObject func(objectID string, exitingObject *Object, clientObject any) (*Object, error)
+	// function used to convert from client structure to our internal InternalObject type
+	convertToObject func(objectID string, exitingObject *InternalObject, clientObject any) (*InternalObject, error)
 
-	// function used to convert from out internal Object type to the clients structure
-	convertFromObject func(object *Object) error
+	// function used to convert from out internal InternalObject type to the clients structure
+	convertFromObject func(object *InternalObject) error
 
 	// stream to gRPC server
 	stream proto.CollabLite_ProcessObjectChangesClient
@@ -39,8 +39,8 @@ type Client struct {
 	// number of conflicts, purely for stats collecting.
 	numConflicts int
 
-	// Object the client is dealing with..
-	object *Object
+	// InternalObject the client is dealing with..
+	object *InternalObject
 
 	// Lock for the above.
 	objectLock sync.Mutex
@@ -67,8 +67,8 @@ func NewClient(serverAddr string) *Client {
 	return c
 }
 
-func (c *Client) RegisterConverters(convertFromObject func(object *Object) error,
-	convertToObject func(objectID string, exitingObject *Object, clientObject any) (*Object, error)) error {
+func (c *Client) RegisterConverters(convertFromObject func(object *InternalObject) error,
+	convertToObject func(objectID string, exitingObject *InternalObject, clientObject any) (*InternalObject, error)) error {
 	c.convertFromObject = convertFromObject
 	c.convertToObject = convertToObject
 	return nil
@@ -187,7 +187,7 @@ func (c *Client) RegisterToObject(ctx context.Context, objectID string) error {
 	}
 
 	// brand new internal object.
-	c.object = &Object{
+	c.object = &InternalObject{
 		ObjectID:   objectID,
 		Properties: make(map[string]Property),
 	}

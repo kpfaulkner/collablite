@@ -22,8 +22,8 @@ type ChangeConfirmation struct {
 	Data       []byte
 }
 
-// Object is a simple object used to represent an object in the system.
-type Object struct {
+// InternalObject is a simple object used to represent an object in the system.
+type InternalObject struct {
 	ObjectID   string
 	Properties map[string]Property
 
@@ -46,8 +46,8 @@ type Property struct {
 	Updated bool
 }
 
-func NewObject(objectID string, objectType string) *Object {
-	o := &Object{
+func NewObject(objectID string, objectType string) *InternalObject {
+	o := &InternalObject{
 		ObjectID:   objectID,
 		ObjectType: objectType,
 		Properties: make(map[string]Property),
@@ -55,7 +55,7 @@ func NewObject(objectID string, objectType string) *Object {
 	return o
 }
 
-func (o *Object) AdjustProperty(propertyID string, data []byte) {
+func (o *InternalObject) AdjustProperty(propertyID string, data []byte) {
 	if p, ok := o.Properties[propertyID]; ok {
 
 		// check if data has changed.

@@ -23,7 +23,7 @@ func NewKeyValueObject(objectID string) *KeyValueObject {
 // ConvertFromObject converts an object to KEYVALUE representation
 // Doesn't really do any conversion...  this is just a default converter where
 // its basically the same as the underlying object.
-func (kv *KeyValueObject) ConvertFromObject(object client.Object) error {
+func (kv *KeyValueObject) ConvertFromObject(object client.InternalObject) error {
 
 	if object.ObjectType == "KEYVALUE" {
 
@@ -35,9 +35,9 @@ func (kv *KeyValueObject) ConvertFromObject(object client.Object) error {
 	return errors.New("Not KeyValue")
 }
 
-func (kv *KeyValueObject) ConvertToObject(objectID string, exitingObject *client.Object, clientObject any) (*client.Object, error) {
+func (kv *KeyValueObject) ConvertToObject(objectID string, exitingObject *client.InternalObject, clientObject any) (*client.InternalObject, error) {
 
-	var obj *client.Object
+	var obj *client.InternalObject
 	if exitingObject == nil {
 		obj = client.NewObject(objectID, "KEYVALUE")
 	} else {
