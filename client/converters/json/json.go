@@ -19,7 +19,7 @@ type JSONObject struct {
 // Currently it is really up to the caller to know if they're really dealing with JSON
 // or not. If this is called and the object is not JSON, there is no guarantee what will result.
 // The object has a "hint" of the type, but this is not enforced.
-func (j *JSONObject) ConvertFromObject(object client.InternalObject) error {
+func (j *JSONObject) ConvertFromObject(object client.ClientObject) error {
 
 	if object.ObjectType == "JSON" {
 
@@ -40,14 +40,14 @@ func (j *JSONObject) ConvertFromObject(object client.InternalObject) error {
 	return errors.New("Not JSON")
 }
 
-func (j *JSONObject) ConvertToObject(objectID string, existingObject *client.InternalObject, clientObject any) (*client.InternalObject, error) {
+func (j *JSONObject) ConvertToObject(objectID string, existingObject *client.ClientObject, clientObject any) (*client.ClientObject, error) {
 
 	clientJson := clientObject.(JSONObject)
 	res := gjson.Parse(clientJson.json)
 
 	allProperties := processKey("", res)
 
-	var obj *client.InternalObject
+	var obj *client.ClientObject
 	if existingObject == nil {
 		obj = client.NewObject(objectID, "JSON")
 	} else {
