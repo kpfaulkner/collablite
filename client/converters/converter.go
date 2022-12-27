@@ -9,9 +9,8 @@ import (
 type Converter interface {
 
 	// Converts from our internal object to what the client wants.
-	// Returns objectid, actual object and error.
-	// Keeping objectid separate due to not knowing if the client object has an objectid property.
-	ConvertFromObject(object client.Object) (string, any, error)
+	// It is up to the client to decide what to do with the data.
+	ConvertFromObject(object client.Object) error
 
 	// ConvertToObject converts a clients object TO the internal object.
 	// It takes in an existing internal object (if one exists) and updates it with the new data.

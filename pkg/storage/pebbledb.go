@@ -86,6 +86,7 @@ func (db *PebbleDB) Get(objectID string) (*Object, error) {
 
 	iter := db.pdb.NewIter(&pebble.IterOptions{
 		LowerBound: []byte(objectID),
+		UpperBound: []byte(objectID + "\xff"),
 	})
 
 	for iter.First(); iter.Valid(); iter.Next() {

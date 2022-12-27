@@ -11,11 +11,15 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+type JSONObject struct {
+	json string
+}
+
 // ObjectToJSON converts an object to JSON representation
 // Currently it is really up to the caller to know if they're really dealing with JSON
 // or not. If this is called and the object is not JSON, there is no guarantee what will result.
 // The object has a "hint" of the type, but this is not enforced.
-func ConvertFromObject(object client.Object) (string, any, error) {
+func (j *JSONObject) ConvertFromObject(object client.Object) error {
 
 	if object.ObjectType == "JSON" {
 
@@ -25,20 +29,21 @@ func ConvertFromObject(object client.Object) (string, any, error) {
 			err := json.Unmarshal(v.Data, &a)
 			if err != nil {
 				log.Errorf("Error unmarshalling JSON: %v", err)
-				return "", "", err
+				return err
 			}
 			newJson, _ = sjson.Set(newJson, k, a)
 		}
-		return newJson, object.ObjectID, nil
+		j.json = newJson
+		return nil
 	}
 
-	return "", "", errors.New("Not JSON")
+	return errors.New("Not JSON")
 }
 
-func ConvertToObject(objectID string, existingObject *client.Object, clientObject any) (*client.Object, error) {
+func (j *JSONObject) ConvertToObject(objectID string, existingObject *client.Object, clientObject any) (*client.Object, error) {
 
-	clientJson := clientObject.(string)
-	res := gjson.Parse(clientJson)
+	clientJson := clientObject.(JSONObject)
+	res := gjson.Parse(clientJson.json)
 
 	allProperties := processKey("", res)
 

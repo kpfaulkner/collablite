@@ -18,14 +18,11 @@ import (
 type Client struct {
 	client proto.CollabLiteClient
 
-	// is called when we receive a confirmation from the server.
-	objectConfirmationCallback func(any) error
-
 	// function used to convert from client structure to our internal Object type
 	convertToObject func(objectID string, exitingObject *Object, clientObject any) (*Object, error)
 
 	// function used to convert from out internal Object type to the clients structure
-	convertFromObject func(object *Object) (string, any, error)
+	convertFromObject func(object *Object) error
 
 	// stream to gRPC server
 	stream proto.CollabLite_ProcessObjectChangesClient
@@ -44,6 +41,9 @@ type Client struct {
 
 	// Object the client is dealing with..
 	object *Object
+
+	// Lock for the above.
+	objectLock sync.Mutex
 }
 
 func NewClient(serverAddr string) *Client {
@@ -67,16 +67,10 @@ func NewClient(serverAddr string) *Client {
 	return c
 }
 
-func (c *Client) RegisterConverters(convertFromObject func(object *Object) (string, any, error),
+func (c *Client) RegisterConverters(convertFromObject func(object *Object) error,
 	convertToObject func(objectID string, exitingObject *Object, clientObject any) (*Object, error)) error {
 	c.convertFromObject = convertFromObject
 	c.convertToObject = convertToObject
-	return nil
-}
-
-// RegisterCallback is called whenever a change for the object being watched is received.
-func (c *Client) RegisterCallback(cb func(any) error) error {
-	c.objectConfirmationCallback = cb
 	return nil
 }
 
@@ -87,7 +81,9 @@ func (c *Client) RegisterCallback(cb func(any) error) error {
 //   - Loop through the dirty properties in the internal object and send to server.
 func (c *Client) SendObject(objectID string, clientObject any) error {
 	var err error
+	c.objectLock.Lock()
 	c.object, err = c.convertToObject(objectID, c.object, clientObject)
+	c.objectLock.Unlock()
 	if err != nil {
 		log.Errorf("failed to convert object: %v", err)
 		return err
@@ -108,7 +104,9 @@ func (c *Client) SendObject(objectID string, clientObject any) error {
 
 			// no longer dirty.
 			v.Dirty = false
+			c.objectLock.Lock()
 			c.object.Properties[k] = v
+			c.objectLock.Unlock()
 		}
 	}
 
@@ -281,21 +279,16 @@ func (c *Client) convertAndExecuteCallback(objectConfirmation *proto.ObjectConfi
 
 	if confirmation.PropertyID != "" {
 
+		c.objectLock.Lock()
 		// indicate its been updated from the server.
 		c.object.Properties[confirmation.PropertyID] = Property{Data: confirmation.Data, Dirty: false, Updated: true}
 
-		_, _, err := c.convertFromObject(c.object)
+		err := c.convertFromObject(c.object)
+		c.objectLock.Unlock()
 		if err != nil {
 			log.Errorf("unable to convert incoming change to object: %v", err)
 			return err
 		}
-
-		/*   do we actually need this?
-		err = c.objectConfirmationCallback(object)
-		if err != nil {
-			log.Errorf("error while calling client callback function: %v", err)
-			return err
-		} */
 	}
 	return nil
 }

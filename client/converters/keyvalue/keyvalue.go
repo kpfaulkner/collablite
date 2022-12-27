@@ -12,26 +12,30 @@ type KeyValueObject struct {
 	Properties map[string][]byte
 }
 
+func NewKeyValueObject(objectID string) *KeyValueObject {
+	kv := KeyValueObject{
+		ObjectID:   objectID,
+		Properties: make(map[string][]byte),
+	}
+	return &kv
+}
+
 // ConvertFromObject converts an object to KEYVALUE representation
 // Doesn't really do any conversion...  this is just a default converter where
 // its basically the same as the underlying object.
-func ConvertFromObject(object client.Object) (string, any, error) {
+func (kv *KeyValueObject) ConvertFromObject(object client.Object) error {
 
 	if object.ObjectType == "KEYVALUE" {
-		kv := KeyValueObject{
-			ObjectID:   object.ObjectID,
-			Properties: make(map[string][]byte),
-		}
 
 		for k, v := range object.Properties {
 			kv.Properties[k] = v.Data
 		}
-		return object.ObjectID, &kv, nil
+		return nil
 	}
-	return "", nil, errors.New("Not KeyValue")
+	return errors.New("Not KeyValue")
 }
 
-func ConvertToObject(objectID string, exitingObject *client.Object, clientObject any) (*client.Object, error) {
+func (kv *KeyValueObject) ConvertToObject(objectID string, exitingObject *client.Object, clientObject any) (*client.Object, error) {
 
 	var obj *client.Object
 	if exitingObject == nil {
