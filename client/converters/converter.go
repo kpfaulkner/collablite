@@ -10,6 +10,9 @@ type Converter interface {
 
 	// Converts from our internal object to what the client wants.
 	// It is up to the client to decide what to do with the data.
+	// Instead of just passing the specific change we pass the updated internal object.
+	// This might be a waste since the client callback will need to determine what has changed.
+	// Possible revisit this.  TODO(kpfaulkner)
 	ConvertFromObject(object client.Object) error
 
 	// ConvertToObject converts a clients object TO the internal object.
