@@ -1,6 +1,9 @@
 package client
 
-import "bytes"
+import (
+	"bytes"
+	"sync"
+)
 
 // OutgoingChange is the change the client is sending to the server.
 // The change is purely related to a single property within the object.
@@ -31,6 +34,10 @@ type ClientObject struct {
 	// object this is representing. eg Could be set to "json" so they know they can
 	// change to JSON later, or anything else. This is purely a helper field.
 	ObjectType string
+
+	// lock for controlling modifications. In two minds about having it within the object itself
+	// or outside controlling. Will include it internally for now and revisit if causing an issue
+	Lock sync.Mutex
 }
 
 // Property is the a property key/value of an object.
@@ -55,16 +62,53 @@ func NewObject(objectID string, objectType string) *ClientObject {
 	return o
 }
 
-func (o *ClientObject) AdjustProperty(propertyID string, data []byte) {
+func (o *ClientObject) AdjustProperty(propertyID string, data []byte, dirty bool, updated bool) {
+	o.Lock.Lock()
+	defer o.Lock.Unlock()
 	if p, ok := o.Properties[propertyID]; ok {
-
 		// check if data has changed.
 		if bytes.Compare(p.Data, data) != 0 {
 			p.Data = data
-			p.Dirty = true
+			p.Dirty = dirty
+			p.Updated = updated
 			o.Properties[propertyID] = p
+		} else {
+
 		}
 	} else {
-		o.Properties[propertyID] = Property{Data: data, Dirty: true}
+		o.Properties[propertyID] = Property{Data: data, Dirty: dirty, Updated: updated}
 	}
+}
+
+// ClearPropertyDirtyFlag is used to adjust dirty flag
+// This smells of a design issue
+func (o *ClientObject) ClearPropertyDirtyFlag(propertyID string) {
+	o.Lock.Lock()
+	defer o.Lock.Unlock()
+	if p, ok := o.Properties[propertyID]; ok {
+		p.Dirty = false
+		o.Properties[propertyID] = p
+	}
+}
+
+// ClearPropertyUpdatedFlag is used to adjust updated flag
+// This smells of a design issue
+func (o *ClientObject) ClearPropertyUpdatedFlag(propertyID string) {
+	o.Lock.Lock()
+	defer o.Lock.Unlock()
+	if p, ok := o.Properties[propertyID]; ok {
+		p.Updated = false
+		o.Properties[propertyID] = p
+	}
+}
+
+func (o *ClientObject) GetProperties() map[string]Property {
+	o.Lock.Lock()
+	defer o.Lock.Unlock()
+
+	newMap := make(map[string]Property, len(o.Properties))
+	for k, v := range o.Properties {
+		newMap[k] = v
+	}
+	return newMap
 }

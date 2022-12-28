@@ -42,8 +42,7 @@ type Client struct {
 	// ClientObject the client is dealing with..
 	object *ClientObject
 
-	// Lock for the above.
-	objectLock sync.Mutex
+	sendCount int
 }
 
 func NewClient(serverAddr string) *Client {
@@ -80,16 +79,22 @@ func (c *Client) RegisterConverters(convertFromObject func(object *ClientObject)
 //     Or populating the entire object.
 //   - Loop through the dirty properties in the internal object and send to server.
 func (c *Client) SendObject(objectID string, clientObject any) error {
+
+	c.sendCount++
+
+	//log.Debugf("count %d", c.sendCount)
 	var err error
-	c.objectLock.Lock()
 	c.object, err = c.convertToObject(objectID, c.object, clientObject)
-	c.objectLock.Unlock()
+
 	if err != nil {
 		log.Errorf("failed to convert object: %v", err)
 		return err
 	}
 
-	for k, v := range c.object.Properties {
+	// get clone of properties... used for iterating over properties.
+	// Just to avoid lock issues.
+	properties := c.object.GetProperties()
+	for k, v := range properties {
 		if v.Dirty {
 			outgoingChange := &OutgoingChange{
 				ObjectID:   objectID,
@@ -103,10 +108,8 @@ func (c *Client) SendObject(objectID string, clientObject any) error {
 			}
 
 			// no longer dirty.
-			v.Dirty = false
-			c.objectLock.Lock()
-			c.object.Properties[k] = v
-			c.objectLock.Unlock()
+			//c.object.AdjustProperty(k, v.Data, false, false)
+			c.object.ClearPropertyDirtyFlag(k)
 		}
 	}
 
@@ -117,7 +120,6 @@ func (c *Client) SendObject(objectID string, clientObject any) error {
 func (c *Client) sendChange(outgoingChange *OutgoingChange) error {
 	// convert to proto struct
 	objChange := convertOutgoingChangeToProto(outgoingChange, c.clientID)
-
 	// store change details for comparison with incoming confirmation
 	objectProperty := fmt.Sprintf("%s-%s", objChange.ObjectId, objChange.PropertyId)
 	c.unconfirmedLock.Lock()
@@ -127,7 +129,6 @@ func (c *Client) sendChange(outgoingChange *OutgoingChange) error {
 		c.unconfirmedLocalChanges[objectProperty] = c.unconfirmedLocalChanges[objectProperty] + 1
 	}
 	c.unconfirmedLock.Unlock()
-
 	if err := c.stream.Send(objChange); err != nil {
 		log.Errorf("%v.Send(%v) = %v", c.stream, objChange, err)
 		return err
@@ -211,6 +212,7 @@ func (c *Client) Listen(ctx context.Context) error {
 	count := 0
 	// receive object confirmation
 	for {
+
 		objectConfirmation, err := c.stream.Recv()
 		if err != nil {
 			log.Errorf("%v.Recv() got error %v, want %v", c.stream, err, nil)
@@ -221,18 +223,16 @@ func (c *Client) Listen(ctx context.Context) error {
 			log.Debugf("Received %d", count)
 		}
 		objectProperty := fmt.Sprintf("%s-%s", objectConfirmation.ObjectId, objectConfirmation.PropertyId)
-
 		// way too much happening in this lock. FIXME(kpfaulkner)
 		c.unconfirmedLock.Lock()
-
 		confirmedLocalChange := false
 
 		// If this change doesn't match any property change performed locally, then allow it through and
 		// call the callback
 		if _, hasLocalChange = c.unconfirmedLocalChanges[objectProperty]; !hasLocalChange {
 			// do not have a local change for this object/property combo, so allow this through.
-
 			err := c.convertAndExecuteCallback(objectConfirmation)
+			c.unconfirmedLock.Unlock()
 			if err != nil {
 				return err
 			}
@@ -250,20 +250,21 @@ func (c *Client) Listen(ctx context.Context) error {
 					delete(c.unconfirmedLocalChanges, objectProperty)
 				}
 				confirmedLocalChange = true
+
 				err := c.convertAndExecuteCallback(objectConfirmation)
 				if err != nil {
 					return err
 				}
 			}
+			c.unconfirmedLock.Unlock()
 		}
-
 		if hasLocalChange && !confirmedLocalChange {
 			c.numConflicts++
 		}
+
 		// if we get here it means that we DO have a similar local change that has not been confirmed
 		// so it means that we drop this. Our unconfirmed local change is still yet to arrive which
 		// means it was generated after...  so this change will get wiped over anyway.
-		c.unconfirmedLock.Unlock()
 	}
 
 	return nil
@@ -278,13 +279,10 @@ func (c *Client) convertAndExecuteCallback(objectConfirmation *proto.ObjectConfi
 	}
 
 	if confirmation.PropertyID != "" {
-
-		c.objectLock.Lock()
 		// indicate its been updated from the server.
-		c.object.Properties[confirmation.PropertyID] = Property{Data: confirmation.Data, Dirty: false, Updated: true}
+		c.object.AdjustProperty(confirmation.PropertyID, confirmation.Data, false, true)
 
 		err := c.convertFromObject(c.object)
-		c.objectLock.Unlock()
 		if err != nil {
 			log.Errorf("unable to convert incoming change to object: %v", err)
 			return err
