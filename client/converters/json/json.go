@@ -2,7 +2,6 @@ package json
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/kpfaulkner/collablite/client"
@@ -21,23 +20,19 @@ type JSONObject struct {
 // The object has a "hint" of the type, but this is not enforced.
 func (j *JSONObject) ConvertFromObject(object client.ClientObject) error {
 
-	if object.ObjectType == "JSON" {
-
-		var newJson string
-		for k, v := range object.Properties {
-			var a any
-			err := json.Unmarshal(v.Data, &a)
-			if err != nil {
-				log.Errorf("Error unmarshalling JSON: %v", err)
-				return err
-			}
-			newJson, _ = sjson.Set(newJson, k, a)
+	var newJson string
+	for k, v := range object.Properties {
+		var a any
+		err := json.Unmarshal(v.Data, &a)
+		if err != nil {
+			log.Errorf("Error unmarshalling JSON: %v", err)
+			return err
 		}
-		j.json = newJson
-		return nil
+		newJson, _ = sjson.Set(newJson, k, a)
 	}
+	j.json = newJson
+	return nil
 
-	return errors.New("Not JSON")
 }
 
 func (j *JSONObject) ConvertToObject(objectID string, existingObject *client.ClientObject, clientObject any) (*client.ClientObject, error) {

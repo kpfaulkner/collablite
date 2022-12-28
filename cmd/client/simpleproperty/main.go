@@ -9,15 +9,12 @@ import (
 	"time"
 
 	"github.com/kpfaulkner/collablite/client"
+	"github.com/kpfaulkner/collablite/client/converters/keyvalue"
 	"github.com/kpfaulkner/collablite/cmd/common"
 	log "github.com/sirupsen/logrus"
 )
 
-func processObjectConfirmation(obj *client.ChangeConfirmation) error {
-	//log.Debugf("confirmation: %v", obj)
-	return nil
-}
-
+// Simple key/value example...
 func main() {
 	fmt.Printf("So it begins...\n")
 	host := flag.String("host", "localhost:50051", "host:port of server")
@@ -31,24 +28,31 @@ func main() {
 
 	cli := client.NewClient(*host)
 
+	// create our keyvalue object that we're going to sync/manipulate
+	kv := keyvalue.NewKeyValueObject(*objectID)
+
+	// register converters used to convert to/from KeyValueObject to the ClientObject
+	cli.RegisterConverters(kv.ConvertFromObject, kv.ConvertToObject)
+
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
 	ctx := context.Background()
-	cli.RegisterCallback(processObjectConfirmation)
 	cli.Connect(ctx)
 	go cli.Listen(ctx)
 
+	cli.RegisterToObject(nil, *objectID)
+
 	if *send {
 		go func() {
+
+			// do LOTS of changes :)
 			for i := 0; i < 1000000000; i++ {
 
-				req := client.OutgoingChange{
-					ObjectID:   *objectID,
-					PropertyID: fmt.Sprintf("property-%03d", rand.Intn(100)),
-					Data:       []byte(fmt.Sprintf("hello world-%s-%d", *id, i)),
-				}
-				if err := cli.SendChange(&req); err != nil {
+				// do some random changes.
+				kv.Properties[fmt.Sprintf("property-%03d", rand.Intn(100))] = []byte(fmt.Sprintf("hello world-%s-%d", *id, i))
+
+				if err := cli.SendObject(*objectID, kv); err != nil {
 					log.Errorf("failed to send change: %v", err)
 					return
 				}
@@ -56,8 +60,6 @@ func main() {
 			}
 		}()
 	}
-
-	cli.RegisterToObject(nil, *objectID)
 
 	wg.Wait()
 }

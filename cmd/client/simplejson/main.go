@@ -94,7 +94,6 @@ func main() {
 	wg.Add(1)
 
 	ctx := context.Background()
-	cli.RegisterCallback(processObjectConfirmation)
 	cli.Connect(ctx)
 	go cli.Listen(ctx)
 

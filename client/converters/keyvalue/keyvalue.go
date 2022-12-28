@@ -1,7 +1,7 @@
 package keyvalue
 
 import (
-	"errors"
+	"sync"
 
 	"github.com/kpfaulkner/collablite/client"
 )
@@ -10,6 +10,8 @@ import (
 type KeyValueObject struct {
 	ObjectID   string
 	Properties map[string][]byte
+
+	lock sync.Mutex
 }
 
 func NewKeyValueObject(objectID string) *KeyValueObject {
@@ -23,16 +25,14 @@ func NewKeyValueObject(objectID string) *KeyValueObject {
 // ConvertFromObject converts an object to KEYVALUE representation
 // Doesn't really do any conversion...  this is just a default converter where
 // its basically the same as the underlying object.
-func (kv *KeyValueObject) ConvertFromObject(object client.ClientObject) error {
+func (kv *KeyValueObject) ConvertFromObject(object *client.ClientObject) error {
 
-	if object.ObjectType == "KEYVALUE" {
-
-		for k, v := range object.Properties {
-			kv.Properties[k] = v.Data
-		}
-		return nil
+	kv.lock.Lock()
+	for k, v := range object.Properties {
+		kv.Properties[k] = v.Data
 	}
-	return errors.New("Not KeyValue")
+	kv.lock.Unlock()
+	return nil
 }
 
 func (kv *KeyValueObject) ConvertToObject(objectID string, exitingObject *client.ClientObject, clientObject any) (*client.ClientObject, error) {
@@ -44,7 +44,7 @@ func (kv *KeyValueObject) ConvertToObject(objectID string, exitingObject *client
 		obj = exitingObject
 	}
 
-	keyValueObject := clientObject.(KeyValueObject)
+	keyValueObject := clientObject.(*KeyValueObject)
 	for k, v := range keyValueObject.Properties {
 		obj.AdjustProperty(k, v)
 	}
