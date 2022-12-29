@@ -115,7 +115,7 @@ func main() {
         }
     }()
 
-	wg.Wait()
+    wg.Wait()
 }
 
 ```
