@@ -64,38 +64,38 @@ import (
 
 // Simple key/value example...
 func main() {
-	host := "localhost:50051"
-	objectID := "testobject"
+    host := "localhost:50051"
+    objectID := "testobject"
 
-	// new client to collablite server
-	cli := client.NewClient(host)
+    // new client to collablite server
+    cli := client.NewClient(host)
 
-	// create our keyvalue object that we're going to sync/manipulate
-	kv := keyvalue.NewKeyValueObject(objectID)
+    // create our keyvalue object that we're going to sync/manipulate
+    kv := keyvalue.NewKeyValueObject(objectID)
 
-	// register converters used to convert to/from KeyValueObject to the ClientObject
-	// ConvertFromObject is to handle incoming changes. This is client specific. It will take the
-	// ClientObject and convert it to the KeyValueObject.
-	// ConvertToObject is for handling outgoing changes. It will take the KeyValueObject and convert it to
-	// a ClientObject and will only send the changes (not the entire object) to the server.
-	cli.RegisterConverters(kv.ConvertFromObject, kv.ConvertToObject)
+    // register converters used to convert to/from KeyValueObject to the ClientObject
+    // ConvertFromObject is to handle incoming changes. This is client specific. It will take the
+    // ClientObject and convert it to the KeyValueObject.
+    // ConvertToObject is for handling outgoing changes. It will take the KeyValueObject and convert it to
+    // a ClientObject and will only send the changes (not the entire object) to the server.
+    cli.RegisterConverters(kv.ConvertFromObject, kv.ConvertToObject)
 
-	ctx := context.Background()
-	// connect to server
-	cli.Connect(ctx)
+    ctx := context.Background()
+    // connect to server
+    cli.Connect(ctx)
 
-	// goroutine for listening for updates
-	go cli.Listen(ctx)
+    // goroutine for listening for updates
+    go cli.Listen(ctx)
 
-	// register with the server for objectID we're interested in
-	cli.RegisterToObject(nil, objectID)
+    // register with the server for objectID we're interested in
+    cli.RegisterToObject(nil, objectID)
 
-	// client ID just to make sure we can track where each update is coming from. Purely for demo purposes.
-	clientID := uuid.New().String()
+    // client ID just to make sure we can track where each update is coming from. Purely for demo purposes.
+    clientID := uuid.New().String()
 
-	// wait group to make sure program doesn't exit before we're done
-	wg := sync.WaitGroup{}
-	wg.Add(1)
+    // wait group to make sure program doesn't exit before we're done
+    wg := sync.WaitGroup{}
+    wg.Add(1)
 
     // send updates to the server every 50 ms with random property changes
     go func() {
