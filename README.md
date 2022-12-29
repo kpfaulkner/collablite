@@ -161,3 +161,5 @@ func main() {
 
 ```
 
+A more complete example is available in the [ebitencollablite repo](https://github.com/kpfaulkner/ebitencollablite)
+
