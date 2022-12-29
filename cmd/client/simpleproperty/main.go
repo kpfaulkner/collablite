@@ -22,7 +22,6 @@ func main() {
 	send := flag.Bool("send", false, "send data to server")
 	logLevel := flag.String("loglevel", "info", "Log Level: debug, info, warn, error")
 	flag.Parse()
-
 	common.SetLogLevel(*logLevel)
 
 	cli := client.NewClient(*host)
@@ -33,15 +32,24 @@ func main() {
 	// register converters used to convert to/from KeyValueObject to the ClientObject
 	cli.RegisterConverters(kv.ConvertFromObject, kv.ConvertToObject)
 
+	ctx := context.Background()
+
+	// connect to server
+	cli.Connect(ctx)
+
+	// goroutine for listening for updates
+	go cli.Listen(ctx)
+
+	// register with the server for objectID we're interested in
+	cli.RegisterToObject(nil, *objectID)
+
+	// client ID just to make sure we can track where each update is coming from. Purely for demo purposes.
+	clientID := uuid.New().String()
+
+	// wait group to make sure program doesn't exit before we're done
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
-	ctx := context.Background()
-	cli.Connect(ctx)
-	go cli.Listen(ctx)
-
-	cli.RegisterToObject(nil, *objectID)
-	clientID := uuid.New().String()
 	if *send {
 		go func() {
 
