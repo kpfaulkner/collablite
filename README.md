@@ -33,10 +33,9 @@ There are a number of key features/conditions that this service provides:
 
 ## Architecture
 
-The server is a comparatively simple service that takes incoming changes for an object from a client, persists to storage and then
-broadcasts the change to all other clients interested in the same object.
+The server is a comparatively simple service that takes incoming changes for an object from a client, persists to storage and then broadcasts the change to all other clients interested in the same object. The server does not inspect nor require the data to be in any particular format. 
 The client is responsible for sending changes to the server, accepting incoming changes from the server and knowing when
-to apply them to the local object and when the changes should be ignored (due to conflict)
+to apply them to the local object and when the changes should be ignored (due to conflict).
 
 ### Server
 
@@ -80,7 +79,7 @@ The key parts to the client are:
 The developer creating a client application has a number of responsibilities to ensure correct functionality:
 - Create struct for own state. This is completely up to the app developer. 
 - Create conversion function to migrate data between app structure and [ClientObject](https://github.com/kpfaulkner/collablite/blob/57baad710ef3c2cae37dcf24ef41dce5f0338205/client/models.go#L29) . These functions must match the [Converter](https://github.com/kpfaulkner/collablite/blob/57baad710ef3c2cae37dcf24ef41dce5f0338205/client/converters/converter.go#L9) interface. For example [here](https://github.com/kpfaulkner/collablite/blob/57baad710ef3c2cae37dcf24ef41dce5f0338205/client/converters/keyvalue/keyvalue.go#L39)
-- The conversion functions are called from the client library whenever an incoming change is received from the server, this means that the conversion functions should not be blocking nor time consuming.
+- The conversion functions are called from the client library whenever an incoming change is received from the server, this means that the conversion functions should not be blocking nor time consuming. Given outgoing and incoming changes are potentially happening oncurrently, please make sure operations on the custom app state are protected with locks.
 
 
 An example client is [provided](https://github.com/kpfaulkner/collablite/blob/main/cmd/client/simpleproperty/main.go). This is a basic client that internally just treats an object as a key/value pair.
