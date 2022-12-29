@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/kpfaulkner/collablite/client"
+	log "github.com/sirupsen/logrus"
 )
 
 // KeyValueObject is just a default structure for the client. Basic map of strings to byte arrays
@@ -11,7 +12,7 @@ type KeyValueObject struct {
 	ObjectID   string
 	Properties map[string][]byte
 
-	lock sync.Mutex
+	Lock sync.Mutex
 }
 
 func NewKeyValueObject(objectID string) *KeyValueObject {
@@ -22,16 +23,32 @@ func NewKeyValueObject(objectID string) *KeyValueObject {
 	return &kv
 }
 
+func (kv *KeyValueObject) GetProperties() map[string][]byte {
+	kv.Lock.Lock()
+	defer kv.Lock.Unlock()
+	newMap := make(map[string][]byte, len(kv.Properties))
+	for k, v := range kv.Properties {
+		newMap[k] = v
+	}
+	return newMap
+}
+
 // ConvertFromObject converts an object to KEYVALUE representation
 // Doesn't really do any conversion...  this is just a default converter where
 // its basically the same as the underlying object.
 func (kv *KeyValueObject) ConvertFromObject(object *client.ClientObject) error {
 
-	kv.lock.Lock()
-	for k, v := range object.Properties {
-		kv.Properties[k] = v.Data
+	kv.Lock.Lock()
+
+	properties := object.GetProperties()
+	for k, v := range properties {
+		if v.Updated {
+			kv.Properties[k] = v.Data
+			log.Debugf("Got update for property %s : %s", k, string(v.Data))
+		}
 	}
-	kv.lock.Unlock()
+	kv.Lock.Unlock()
+
 	return nil
 }
 
@@ -45,8 +62,11 @@ func (kv *KeyValueObject) ConvertToObject(objectID string, exitingObject *client
 	}
 
 	keyValueObject := clientObject.(*KeyValueObject)
-	for k, v := range keyValueObject.Properties {
-		obj.AdjustProperty(k, v)
+
+	properties := keyValueObject.GetProperties()
+
+	for k, v := range properties {
+		obj.AdjustProperty(k, v, true, false)
 	}
 	return obj, nil
 }

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kpfaulkner/collablite/client"
 	"github.com/kpfaulkner/collablite/client/converters/keyvalue"
 	"github.com/kpfaulkner/collablite/cmd/common"
@@ -16,9 +17,7 @@ import (
 
 // Simple key/value example...
 func main() {
-	fmt.Printf("So it begins...\n")
 	host := flag.String("host", "localhost:50051", "host:port of server")
-	id := flag.String("id", "ken1", "id of client")
 	objectID := flag.String("objectid", "testobject1", "objectid of object to write/watch")
 	send := flag.Bool("send", false, "send data to server")
 	logLevel := flag.String("loglevel", "info", "Log Level: debug, info, warn, error")
@@ -42,16 +41,17 @@ func main() {
 	go cli.Listen(ctx)
 
 	cli.RegisterToObject(nil, *objectID)
-
+	clientID := uuid.New().String()
 	if *send {
 		go func() {
 
 			// do LOTS of changes :)
-			for i := 0; i < 1000000000; i++ {
+			for i := 0; i < 100000; i++ {
 
+				kv.Lock.Lock()
 				// do some random changes.
-				kv.Properties[fmt.Sprintf("property-%03d", rand.Intn(100))] = []byte(fmt.Sprintf("hello world-%s-%d", *id, i))
-
+				kv.Properties[fmt.Sprintf("property-%03d", rand.Intn(100))] = []byte(fmt.Sprintf("hello world-%s-%d", clientID, i))
+				kv.Lock.Unlock()
 				if err := cli.SendObject(*objectID, kv); err != nil {
 					log.Errorf("failed to send change: %v", err)
 					return
