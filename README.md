@@ -170,3 +170,4 @@ func main() {
 
 A more complete example is available in the [ebitencollablite repo](https://github.com/kpfaulkner/ebitencollablite)
 
+A video of this running is on [youtube](https://www.youtube.com/watch?v=nQXM51JVsEc&list=PLvQEMqf8q-jpQmPZLpze-Ix0LVG5q1u7W)

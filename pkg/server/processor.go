@@ -45,6 +45,19 @@ func NewProcessor(db storage.DB, dbWriterChannel chan proto.ObjectChange) *Proce
 	return &p
 }
 
+func (p *Processor) GetObjectIDOutChannels(objectID string) ([]chan *proto.ObjectConfirmation, error) {
+	p.objectChannelLock.Lock()
+	defer p.objectChannelLock.Unlock()
+
+	//channels := make([]chan *proto.ObjectConfirmation, len(p.objectChannels[objectID].outChannels))
+	channels := []chan *proto.ObjectConfirmation{}
+	for _, v := range p.objectChannels[objectID].outChannels {
+		channels = append(channels, v)
+	}
+
+	return channels, nil
+}
+
 // RegisterClientWithObject registers a clientID and objectID with the processor.
 // This is used when an object is processed... it will contain a list of clients/channels
 // that need to get the results of the processing of a given object.
@@ -139,27 +152,24 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 		// loop through all out channels and send result.
 		// this REALLY sucks holding the lock for this long, but will do for now.
 		// FIXME(kpfaulkner) MUST optimise this!
-		p.objectChannelLock.Lock()
 
 		// do a check for the objectID since the objects/clients might be nuked
 		// This might be a point of optimisation. Constantly checking that map is going to be expensive (gut feel, NOT
 		// measured). Could have a flag to indicate IF the clients registered for this object have changed.
 		// IF there is a change, then we read from map, otherwise we used something we've cached.
 		// FIXME(kpfaulkner) major problem!
-		chans, ok := p.objectChannels[objectID]
-		p.objectChannelLock.Unlock()
-		if ok {
-			for _, oc := range chans.outChannels {
-				select {
-				case oc <- &res:
-					// nothing...  body required
-				case <-time.After(5 * time.Millisecond):
-					// if we cannot send the data to the client for some reason... just drop the message?
-					log.Warnf("Unable to send to client. Channel full? Dropping message")
-				}
+
+		p.objectChannelLock.Lock()
+		for _, oc := range p.objectChannels[objectID].outChannels {
+			select {
+			case oc <- &res:
+				// nothing...  body required
+			case <-time.After(5 * time.Millisecond):
+				// if we cannot send the data to the client for some reason... just drop the message?
+				log.Warnf("Unable to send to client. Channel full? Dropping message")
 			}
 		}
-
+		p.objectChannelLock.Unlock()
 		// generate RPS stats
 		count++
 		if time.Now().Sub(t).Seconds() > 1 {
