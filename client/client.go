@@ -201,6 +201,13 @@ func (c *Client) RegisterToObject(ctx context.Context, objectID string) error {
 	return nil
 }
 
+func (c *Client) ClearUnconfirmedChangesTracking() error {
+	c.unconfirmedLock.Lock()
+	c.unconfirmedLocalChanges = make(map[string]int)
+	c.unconfirmedLock.Unlock()
+	return nil
+}
+
 // Listen will loop for incoming changes from the server. Any changes that are received
 // and are NOT discarded (due to modifying the same object/property as a local change)
 // will be passed to the callback registered via RegisterCallback
