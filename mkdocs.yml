@@ -8,3 +8,14 @@ nav:
     - Getting Started:
         - Installation: /installation
         - Quick Start: /quickstart
+
+
+theme:
+    name: material
+    language: en
+    font:
+        text: Gotham
+    palette:
+        scheme: slate
+        primary: deep purple
+        accent: yellow
