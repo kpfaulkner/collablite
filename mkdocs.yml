@@ -4,10 +4,10 @@ repo_url: "https://github.com/kpfaulkner/collablite"
 
 nav:
     - Home: index.md
-    - About: /about
+    - About: /collablite/about
     - Getting Started:
-        - Installation: /installation
-        - Quick Start: /quickstart
+        - Installation: /collablite/installation
+        - Quick Start: /collablite/quickstart
 
 
 theme:
