@@ -3,7 +3,7 @@ site_url: https://collablite.kenfau.net
 repo_url: "https://github.com/kpfaulkner/collablite"
 
 nav:
-    - Home: /index
+    - Home: index.md
     - About: /about
     - Getting Started:
         - Installation: /installation
