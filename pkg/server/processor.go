@@ -45,19 +45,6 @@ func NewProcessor(db storage.DB, dbWriterChannel chan proto.ObjectChange) *Proce
 	return &p
 }
 
-func (p *Processor) GetObjectIDOutChannels(objectID string) ([]chan *proto.ObjectConfirmation, error) {
-	p.objectChannelLock.Lock()
-	defer p.objectChannelLock.Unlock()
-
-	//channels := make([]chan *proto.ObjectConfirmation, len(p.objectChannels[objectID].outChannels))
-	channels := []chan *proto.ObjectConfirmation{}
-	for _, v := range p.objectChannels[objectID].outChannels {
-		channels = append(channels, v)
-	}
-
-	return channels, nil
-}
-
 // RegisterClientWithObject registers a clientID and objectID with the processor.
 // This is used when an object is processed... it will contain a list of clients/channels
 // that need to get the results of the processing of a given object.
@@ -65,8 +52,6 @@ func (p *Processor) GetObjectIDOutChannels(objectID string) ([]chan *proto.Objec
 func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (chan *proto.ObjectChange, chan *proto.ObjectConfirmation, error) {
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
-
-	//log.Debugf("Registering client %s against object %s", clientID, objectID)
 
 	var oc *ObjectIDChannels
 	var ok bool
@@ -148,10 +133,6 @@ func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.Obj
 		res.PropertyId = objChange.PropertyId
 		res.UniqueId = objChange.UniqueId
 		res.Data = objChange.Data
-
-		// loop through all out channels and send result.
-		// this REALLY sucks holding the lock for this long, but will do for now.
-		// FIXME(kpfaulkner) MUST optimise this!
 
 		// do a check for the objectID since the objects/clients might be nuked
 		// This might be a point of optimisation. Constantly checking that map is going to be expensive (gut feel, NOT
