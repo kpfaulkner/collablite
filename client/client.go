@@ -279,6 +279,8 @@ func (c *Client) Listen(ctx context.Context) error {
 	return nil
 }
 
+// convertAndExecuteCallback convert the proto object to the internal ClientObject, but then also calls
+// the client provided clientObject -> users-object function.
 func (c *Client) convertAndExecuteCallback(objectConfirmation *proto.ObjectConfirmation) error {
 	confirmation := convertProtoToChangeConfirmation(objectConfirmation)
 
@@ -323,10 +325,7 @@ func convertOutgoingChangeToProto(outgoingChange *OutgoingChange, clientID strin
 		ObjectId:   outgoingChange.ObjectID,
 		PropertyId: outgoingChange.PropertyID,
 		Data:       outgoingChange.Data,
-
-		// add unique id to track local changes.
-		//UniqueId: fmt.Sprintf("%s-%s", clientID[:8], uuid.New().String()),
-		UniqueId: clientID,
+		UniqueId:   clientID,
 	}
 }
 
