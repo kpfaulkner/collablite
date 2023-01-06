@@ -1,8 +1,17 @@
 # Installation
 
+
+## Requirements
+
+- Go (using 1.19 for development)
+- Protobuf compiler (protoc)
+
 To run the server:
 
 ```
+
+protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative .\proto\collablite.proto
+
 cd cmd/server
 go build .
 ./server
