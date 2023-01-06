@@ -45,6 +45,7 @@ type Client struct {
 	sendCount int
 }
 
+// NewClient creates a new client, configured to connect to serverAddr (host:port)
 func NewClient(serverAddr string) *Client {
 
 	// insecure for now.
@@ -57,8 +58,6 @@ func NewClient(serverAddr string) *Client {
 	}
 
 	client := proto.NewCollabLiteClient(conn)
-
-	// Make channel size configurable FIXME(kpfaulkner)
 	c := &Client{client: client,
 		unconfirmedLocalChanges: make(map[string]int),
 		clientID:                uuid.New().String(),
@@ -66,6 +65,8 @@ func NewClient(serverAddr string) *Client {
 	return c
 }
 
+// RegisterConverters called by the client code to register functions to convert between their own structures/objects
+// and our ClientObject struct.
 func (c *Client) RegisterConverters(convertFromObject func(object *ClientObject) error,
 	convertToObject func(objectID string, exitingObject *ClientObject, clientObject any) (*ClientObject, error)) error {
 	c.convertFromObject = convertFromObject
@@ -81,8 +82,6 @@ func (c *Client) RegisterConverters(convertFromObject func(object *ClientObject)
 func (c *Client) SendObject(objectID string, clientObject any) error {
 
 	c.sendCount++
-
-	//log.Debugf("count %d", c.sendCount)
 	var err error
 	c.object, err = c.convertToObject(objectID, c.object, clientObject)
 
@@ -116,7 +115,7 @@ func (c *Client) SendObject(objectID string, clientObject any) error {
 	return nil
 }
 
-// SendChange sends the change to the server for processing
+// sendChange sends the change to the server for processing
 func (c *Client) sendChange(outgoingChange *OutgoingChange) error {
 	// convert to proto struct
 	objChange := convertOutgoingChangeToProto(outgoingChange, c.clientID)
@@ -201,7 +200,9 @@ func (c *Client) RegisterToObject(ctx context.Context, objectID string) error {
 	return nil
 }
 
-func (c *Client) ClearUnconfirmedChangesTracking() error {
+// clearUnconfirmedChangesTracking called to clear out any unconfirmed changes.
+// Will clear out state when client starts listening (Listen() func) to a new object.
+func (c *Client) clearUnconfirmedChangesTracking() error {
 	c.unconfirmedLock.Lock()
 	c.unconfirmedLocalChanges = make(map[string]int)
 	c.unconfirmedLock.Unlock()
@@ -216,6 +217,7 @@ func (c *Client) Listen(ctx context.Context) error {
 	//var origUniqueIDs []string
 	var hasLocalChange bool
 
+	c.clearUnconfirmedChangesTracking()
 	count := 0
 	// receive object confirmation
 	for {
