@@ -5,8 +5,8 @@ WORKDIR /app
 ADD . /app
 RUN go mod download
 
-RUN apk add --no-cache protoc
-RUN apk update && apk add --no-cache make protobuf-dev
+RUN apk add  protoc
+RUN apk update && apk add  make protobuf-dev
 RUN CGO_ENABLED=0 go build -o /collablite /app/cmd/server/
 
 
