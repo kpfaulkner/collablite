@@ -6,8 +6,8 @@ nav:
     - Home: index.md
     - About: /about
     - Getting Started:
-        - Installation: /collablite/installation
-        - Quick Start: /collablite/quickstart
+        - Installation: /installation
+        - Quick Start: /quickstart
 
 
 theme:
