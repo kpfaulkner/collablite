@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"path"
 
 	"github.com/kpfaulkner/collablite/cmd/common"
 	log "github.com/sirupsen/logrus"
@@ -18,7 +19,9 @@ func main() {
 	fmt.Printf("So it begins...\n")
 	port := flag.Int("port", 50051, "The server port")
 	logLevel := flag.String("loglevel", "info", "Log Level: debug, info, warn, error")
-	store := flag.Bool("store", false, "store data to disk")
+	store := flag.Bool("store", false, "Store data to disk")
+	storePath := flag.String("storepath", ".", "Path of storage location (if persist to local disk)")
+
 	flag.Parse()
 
 	common.SetLogLevel(*logLevel)
@@ -38,9 +41,7 @@ func main() {
 	var db storage.DB
 
 	if *store {
-		//db, err = storage.NewDBSQLite("collablite.db")
-		//db, err = storage.NewBadgerDB("badgerdb")
-		pebbleClient, err := storage.NewPebbleClient("pebbledb")
+		pebbleClient, err := storage.NewPebbleClient(path.Join(*storePath, "pebbledb"))
 		if err != nil {
 			log.Fatalf("unable to create pebble client: %v", err)
 		}
