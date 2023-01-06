@@ -10,7 +10,7 @@ Collablite is a service that allows multiple clients to share data with each oth
 It is inspired by the Figma post on their multiplayer technology.
 It is not a CRDT implementation, but it does use a similar approach to allow multiple clients to share data without conflict.
 
-This is cross platform and can be built for Windows, Mac and Linux.
+Collablite is written in pure Go (no cgo) and is cross platform.
 
 ## How does it work?
 
