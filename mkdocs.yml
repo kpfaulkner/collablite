@@ -19,3 +19,13 @@ theme:
         scheme: slate
         primary: deep purple
         accent: yellow
+
+
+copyright: Copyright &copy; 2023 Ken Faulkner
+extra:
+    generator: false
+    social:
+        - type: Mastodon
+          link: @kpfaulkner@hachyderm.io
+        - type: github
+          link: https://github.com/kpfaulkner
