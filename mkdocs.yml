@@ -4,7 +4,7 @@ repo_url: "https://github.com/kpfaulkner/collablite"
 
 nav:
     - Home: index.md
-    - About: /collablite/about
+    - About: /about
     - Getting Started:
         - Installation: /collablite/installation
         - Quick Start: /collablite/quickstart
