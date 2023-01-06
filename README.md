@@ -71,9 +71,20 @@ server ->> client :Send change to client
 
 To run the server:
 
+generate the protobuf code using protoc:
+
+```
+protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative .\proto\collablite.proto
+```
+
+build and run server
+```
 cd cmd/server
 go build .
 ./server 
+```
+
+Alternately you can run buildserver.sh or buildserver.cmd
 
 By default it will be listening on port 50511 (gRPC) and will create a Pebble DB directory cmd/server/pebble for persistent storage.
 
