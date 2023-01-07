@@ -1,37 +1,35 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: collablite-deployment
-  labels:
-    app: collablite
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: collablite
-  template:
-    metadata:
-      labels:
-        app: collablite
-    spec:
-      containers:
-      - name: collablite
-        image: collablite
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 50051
-
----
 apiVersion: v1
 kind: Service
 metadata:
-  name: collablite
+  name: collabliteservice
 spec:
   clusterIP: None
-  ports:
-  - name: http
-    port: 50051
-    targetPort: http
-    protocol: TCP
   selector:
-    app: collablite
+    k8s-app: collablite
+  ports:
+    - port: 50051
+      name: grpc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collablite
+  labels:
+    k8s-app: collablite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: collablite
+  template:
+    metadata:
+      labels:
+        k8s-app: collablite
+    spec:
+      containers:
+        - name: collablite
+          image: collablite
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 50051
+              name: grpc
