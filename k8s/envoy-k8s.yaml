@@ -14,7 +14,7 @@ spec:
   selector:
     app: collablite-envoy
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: collablite-envoy
@@ -31,8 +31,8 @@ spec:
     spec:
       containers:
       - name: collablite-envoy
-        image: mydockerhub/mycustomenvoy
-        imagePullPolicy: Always
+        image: collabliteenvoy:latest
+        imagePullPolicy: Never
         env:
         - name: "ENVOY_LB_ALG"
           value: "LEAST_REQUEST"
