@@ -90,6 +90,13 @@ Alternately you can run buildserver.sh or buildserver.cmd
 
 By default it will be listening on port 50511 (gRPC) and will create a Pebble DB directory cmd/server/pebble for persistent storage.
 
+Alternatively you can run the server in Kubernetesa. Instructions to be completed.. TODO
+note: for minikube, forwarding, use something similar to:
+
+ssh -N -p 22 kenfa@10.0.0.111 -L 127.0.0.1:50051:10.105.93.107:50051
+Then point client to localhost:50051
+
+
 ### Client
 
 The key parts to the client are:
