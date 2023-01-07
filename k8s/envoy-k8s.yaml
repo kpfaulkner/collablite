@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: collablite-envoy
+  labels:
+    app: collablite-envoy
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 50051
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: collablite-envoy
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: collablite-envoy
+  labels:
+    app: collablite-envoy
+spec:
+  selector:
+    matchLabels:
+      app: collablite-envoy
+  template:
+    metadata:
+      labels:
+        app: collablite-envoy
+    spec:
+      containers:
+      - name: collablite-envoy
+        image: mydockerhub/mycustomenvoy
+        imagePullPolicy: Always
+        env:
+        - name: "ENVOY_LB_ALG"
+          value: "LEAST_REQUEST"
+        - name: "SERVICE_NAME"
+          value: "collablite"
+        ports:
+        - name: http
+          containerPort: 50051
+        - name: envoy-admin
+          containerPort: 9901
