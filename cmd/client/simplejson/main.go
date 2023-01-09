@@ -94,7 +94,7 @@ func main() {
 	wg.Add(1)
 
 	ctx := context.Background()
-	cli.Connect(ctx)
+	cli.Connect(ctx, *objectID)
 	go cli.Listen(ctx)
 
 	var err error

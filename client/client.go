@@ -7,11 +7,11 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	log "github.com/sirupsen/logrus"
-
 	"github.com/kpfaulkner/collablite/proto"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 // Client is the client API for CollabLite service.
@@ -137,8 +137,10 @@ func (c *Client) sendChange(outgoingChange *OutgoingChange) error {
 }
 
 // Connect creates the stream against the server
-func (c *Client) Connect(ctx context.Context) error {
+func (c *Client) Connect(ctx context.Context, objectID string) error {
 
+	md := metadata.New(map[string]string{"x-object-id": objectID})
+	ctx = metadata.NewOutgoingContext(ctx, md)
 	stream, err := c.client.ProcessObjectChanges(ctx)
 	if err != nil {
 		log.Errorf("%v.ProcessObjectChanges(_) = _, %v", c.client, err)

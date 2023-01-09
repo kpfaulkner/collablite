@@ -35,7 +35,7 @@ func main() {
 	ctx := context.Background()
 
 	// connect to server
-	cli.Connect(ctx)
+	cli.Connect(ctx, *objectID)
 
 	// goroutine for listening for updates
 	go cli.Listen(ctx)
