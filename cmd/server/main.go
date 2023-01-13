@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"path"
 
 	"github.com/kpfaulkner/collablite/cmd/common"
@@ -14,6 +16,16 @@ import (
 	"github.com/kpfaulkner/collablite/proto"
 	"google.golang.org/grpc"
 )
+
+func healthcheck(w http.ResponseWriter, r *http.Request) {
+	log.Debugf("health check")
+	io.WriteString(w, "Hello, HTTP!\n")
+}
+
+func startHealthCheckEndpoint() {
+	http.HandleFunc("/healthcheck", healthcheck)
+	http.ListenAndServe(":9999", nil)
+}
 
 func main() {
 	fmt.Printf("So it begins...\n")
@@ -55,6 +67,8 @@ func main() {
 			log.Fatalf("failed to create nulldb: %v", err)
 		}
 	}
+
+	go startHealthCheckEndpoint()
 
 	grpcServer := grpc.NewServer(opts...)
 	proto.RegisterCollabLiteServer(grpcServer, server.NewCollabLiteServer(db))

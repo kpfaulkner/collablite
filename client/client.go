@@ -138,7 +138,7 @@ func (c *Client) sendChange(outgoingChange *OutgoingChange) error {
 
 // Connect creates the stream against the server
 func (c *Client) Connect(ctx context.Context, objectID string) error {
-
+	log.Debugf("Connect for object %s", objectID)
 	md := metadata.New(map[string]string{"x-object-id": objectID})
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	stream, err := c.client.ProcessObjectChanges(ctx)
