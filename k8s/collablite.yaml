@@ -9,6 +9,7 @@ spec:
   ports:
     - port: 50051
       name: grpc
+      targetPort: 50051
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -33,6 +34,8 @@ spec:
           ports:
             - containerPort: 50051
               name: grpc
+            - containerPort: 9999
+              name: healthcheck
           livenessProbe:
               initialDelaySeconds: 2
               periodSeconds: 5
