@@ -23,6 +23,9 @@ static_resources:
                             grpc: {}
                           route:
                             cluster: service_cluster
+                            hash_policy:
+                              header:
+                                header_name: "x-object-id"
                             timeout:
                               seconds: 0
                               nanos: 0
