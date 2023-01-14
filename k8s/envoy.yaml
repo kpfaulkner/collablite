@@ -43,7 +43,7 @@ static_resources:
     - name: service_cluster
       connect_timeout: 0.25s
       type: strict_dns
-      lb_policy: round_robin
+      lb_policy: ring_hash
       http2_protocol_options: {}
       hosts:
         - socket_address:
