@@ -3,11 +3,15 @@ package server
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/kpfaulkner/collablite/pkg/storage"
 	"github.com/kpfaulkner/collablite/proto"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // CollabLiteServer receives gRPC requests from clients and modifies the
@@ -57,6 +61,19 @@ func (cls *CollabLiteServer) startDBWriter(changeCh chan proto.ObjectChange) err
 //   - Send the change to be processed via channel.
 func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_ProcessObjectChangesServer) error {
 
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		return status.Errorf(codes.DataLoss, "failed to get metadata")
+	}
+	objId := md["x-object-id"]
+	if len(objId) == 0 {
+		return status.Errorf(codes.InvalidArgument, "missing 'x-object-id' header")
+	}
+	if strings.Trim(objId[0], " ") == "" {
+		return status.Errorf(codes.InvalidArgument, "empty 'x-object-id' header")
+	}
+
+	log.Debugf("Connected with objectID %s in header", objId[0])
 	incomingChangeCount := 0
 	clientID := uuid.New().String()
 
