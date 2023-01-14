@@ -23,6 +23,7 @@ func healthcheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func startHealthCheckEndpoint() {
+	log.Debugf("starting health check listener")
 	http.HandleFunc("/healthcheck", healthcheck)
 	http.ListenAndServe(":9999", nil)
 }

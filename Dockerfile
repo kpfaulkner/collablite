@@ -15,5 +15,5 @@ FROM alpine
 COPY --from=build /collablite /bin
 
 EXPOSE 50051
-
-CMD [ "collablite" ]
+EXPOSE 9999
+CMD ["collablite","-loglevel","debug"]
