@@ -62,6 +62,8 @@ func NewObject(objectID string, objectType string) *ClientObject {
 	return o
 }
 
+// AdjustProperty modifies the property data, dirty flag and updated flag
+// FIXME(kpfaulkner) Cannot remember what the difference between dirty and updated is....  :/
 func (o *ClientObject) AdjustProperty(propertyID string, data []byte, dirty bool, updated bool) {
 	o.Lock.Lock()
 	defer o.Lock.Unlock()
@@ -72,8 +74,6 @@ func (o *ClientObject) AdjustProperty(propertyID string, data []byte, dirty bool
 			p.Dirty = dirty
 			p.Updated = updated
 			o.Properties[propertyID] = p
-		} else {
-
 		}
 	} else {
 		o.Properties[propertyID] = Property{Data: data, Dirty: dirty, Updated: updated}

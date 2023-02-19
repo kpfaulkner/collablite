@@ -50,6 +50,8 @@ func NewProcessor(db storage.DB, dbWriterChannel chan proto.ObjectChange) *Proce
 // that need to get the results of the processing of a given object.
 // Will return inChan (specific for object) and results channel (specific for object+clientid combination) to caller.
 func (p *Processor) RegisterClientWithObject(clientID string, objectID string) (chan *proto.ObjectChange, chan *proto.ObjectConfirmation, error) {
+
+	log.Debugf("RegisterClientWithObject for clientID %s and objectID %s\n", clientID, objectID)
 	p.objectChannelLock.Lock()
 	defer p.objectChannelLock.Unlock()
 
@@ -117,6 +119,7 @@ func (p *Processor) UnregisterClientWithObject(clientID string, objectID string)
 // writing it to storage and then sending the results to all clients that are listening
 func (p *Processor) ProcessObjectChanges(objectID string, inChan chan *proto.ObjectChange) error {
 
+	log.Debugf("ProcessObjectChanges for objectID %s", objectID)
 	t := time.Now()
 	count := 0
 	for objChange := range inChan {

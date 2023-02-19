@@ -61,6 +61,7 @@ func (cls *CollabLiteServer) startDBWriter(changeCh chan proto.ObjectChange) err
 //   - Send the change to be processed via channel.
 func (cls *CollabLiteServer) ProcessObjectChanges(stream proto.CollabLite_ProcessObjectChangesServer) error {
 
+	log.Debugf("ProcessObjectChanges started")
 	md, ok := metadata.FromIncomingContext(stream.Context())
 	if !ok {
 		return status.Errorf(codes.DataLoss, "failed to get metadata")
